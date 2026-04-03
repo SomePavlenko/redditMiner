@@ -31,20 +31,46 @@ API docs: http://localhost:8000/docs
 
 ## Получение Reddit API ключей (бесплатно)
 
-1. Залогинься на reddit.com
-2. Иди на https://www.reddit.com/prefs/apps
-3. Внизу нажми **"create another app..."**
-4. Заполни:
-   - **name:** `reddit-miner`
+С ноября 2025 Reddit требует **предварительное одобрение** перед созданием API приложения.
+
+### Шаг 1: Подать заявку на API доступ
+
+1. Открой форму (через VPN если из России):
+   https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
+2. Заполни:
+   - **What do you need assistance with?** → `API Access Request`
+   - **Your email address** → твой email
+   - **Which role?** → `Individual Developer` или `Researcher`
+   - **Описание** (если есть поле):
+     ```
+     I'm building a personal, non-commercial script that reads public posts
+     and top comments from subreddits related to job search topics.
+     The script runs once daily and analyzes common user pain points
+     for personal research purposes.
+     Expected volume: under 100 API requests per day.
+     I will only access publicly available data (posts, comments, subreddit listings).
+     No user data collection, no commercial use, no redistribution of Reddit content.
+     I have read and will comply with the Responsible Builder Policy.
+     ```
+3. Нажми **Submit** и жди ответ (обычно до 7 дней)
+
+### Шаг 2: Создать приложение (после одобрения)
+
+1. Иди на https://www.reddit.com/prefs/apps (через VPN)
+2. Внизу нажми **"create another app..."**
+3. Заполни:
+   - **name:** любое (например `reddie-miner`)
    - **type:** `script`
-   - **redirect uri:** `http://localhost:8080`
-   - остальное — что угодно или пусто
-5. Нажми **"create app"**
-6. Скопируй:
+   - **description:** `mining reddit posts`
+   - **redirect uri:** `http://localhost:8080` (обязательное поле, но не используется)
+   - **about url:** пусто
+4. Пройди капчу, нажми **"create app"**
+5. Скопируй:
    - **client_id** — короткая строка прямо под названием приложения
    - **client_secret** — поле "secret"
 
-Вставь в `.env`:
+### Шаг 3: Вставить в .env
+
 ```
 REDDIT_CLIENT_ID=твой_client_id
 REDDIT_CLIENT_SECRET=твой_client_secret

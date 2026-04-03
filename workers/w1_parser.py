@@ -47,13 +47,14 @@ def run():
     ).fetchall()
 
     api_calls = 0
+    api_limit = config.get("reddit_api_limit", 100)
     total_posts = 0
     ua = os.environ["REDDIT_USER_AGENT"]
 
     for sub_row in subs:
         sub = sub_row["name"]
-        if api_calls >= 580:
-            logger.info("W1: API limit approaching, stopping")
+        if api_calls >= api_limit:
+            logger.info(f"W1: API limit ({api_limit}) approaching, stopping")
             break
 
         try:
@@ -94,7 +95,7 @@ def run():
                 except Exception as e:
                     logger.warning(f"W1: failed to fetch comments for {p['id']}: {e}")
 
-                if api_calls >= 580:
+                if api_calls >= api_limit:
                     break
 
                 try:

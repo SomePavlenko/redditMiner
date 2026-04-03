@@ -2,8 +2,8 @@ import hashlib
 import json
 import os
 import httpx
-from workers.helpers import load_config, setup_logger, claude_call, load_env, ROOT
-from workers.db import get_conn
+from workers.helpers import load_config, setup_logger, claude_call, load_env, ROOT, parse_json_response
+from workers.db import use_conn
 
 TOPIC_HASH_FILE = os.path.join(ROOT, ".topic_hash")
 
@@ -30,10 +30,7 @@ def fetch_claude_subreddits(topic, config, logger):
 Return ONLY a JSON array, no markdown: [{{"name": "subredditname", "estimated_members": 100000, "relevance_score": 9}}]
 Sort by relevance_score DESC. Use real subreddit names without r/ prefix."""
     raw = claude_call("claude-haiku-4-5-20250901", prompt, config, logger)
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-    return json.loads(raw)
+    return parse_json_response(raw, logger)
 
 
 def fetch_reddit_subreddits(topic, logger):
@@ -72,7 +69,12 @@ def run(force=False):
 
     logger.info(f"W0: starting for topic '{topic}'")
 
-    claude_subs = fetch_claude_subreddits(topic, config, logger)
+    try:
+        claude_subs = fetch_claude_subreddits(topic, config, logger)
+    except json.JSONDecodeError as e:
+        logger.error(f"W0: Claude returned unparseable JSON: {e}")
+        return
+
     reddit_subs = fetch_reddit_subreddits(topic, logger)
 
     # Deduplicate by name (lowercase)
@@ -84,17 +86,21 @@ def run(force=False):
 
     merged = sorted(seen.values(), key=lambda x: x["relevance_score"], reverse=True)
 
-    conn = get_conn()
-    conn.execute("UPDATE subreddits SET active=0 WHERE topic=?", (topic,))
-    for s in merged:
-        conn.execute(
-            """INSERT INTO subreddits (name, topic, weight, active)
-            VALUES (?, ?, ?, 1)
-            ON CONFLICT(name) DO UPDATE SET topic=?, weight=?, active=1""",
-            (s["name"], topic, s["relevance_score"], topic, s["relevance_score"]),
-        )
-    conn.commit()
-    conn.close()
+    with use_conn() as conn:
+        try:
+            conn.execute("UPDATE subreddits SET active=0 WHERE topic=?", (topic,))
+            for s in merged:
+                conn.execute(
+                    """INSERT INTO subreddits (name, topic, weight, active)
+                    VALUES (?, ?, ?, 1)
+                    ON CONFLICT(name) DO UPDATE SET topic=?, weight=?, active=1""",
+                    (s["name"], topic, s["relevance_score"], topic, s["relevance_score"]),
+                )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"W0: DB transaction failed, rolled back: {e}")
+            return
 
     save_topic_hash(topic)
     logger.info(f"W0: found {len(merged)} subreddits for topic '{topic}'")

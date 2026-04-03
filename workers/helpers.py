@@ -1,12 +1,16 @@
 import json
 import os
+import re
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import anthropic
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
+
+_env_loaded = False
+_client = None
 
 
 def load_config():
@@ -20,7 +24,18 @@ def save_config(config):
 
 
 def load_env():
-    load_dotenv(os.path.join(ROOT, ".env"))
+    global _env_loaded
+    if not _env_loaded:
+        load_dotenv(os.path.join(ROOT, ".env"))
+        _env_loaded = True
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        load_env()
+        _client = anthropic.Anthropic()
+    return _client
 
 
 def setup_logger(worker_name):
@@ -40,14 +55,24 @@ def setup_logger(worker_name):
     return logger
 
 
+def parse_json_response(raw, logger):
+    """Safely parse JSON from Claude response, stripping markdown fences."""
+    raw = raw.strip()
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    match = re.search(r"```(?:json)?\s*\n?(.*?)```", raw, re.DOTALL)
+    if match:
+        raw = match.group(1).strip()
+    return json.loads(raw)
+
+
 def claude_call(model, prompt, config, logger):
-    load_env()
-    client = anthropic.Anthropic()
+    client = _get_client()
     for attempt in range(config["claude_retry_attempts"]):
         try:
             response = client.messages.create(
                 model=model,
                 max_tokens=4096,
+                timeout=120.0,
                 messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text

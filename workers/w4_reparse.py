@@ -1,7 +1,7 @@
 import os
 import httpx
 from workers.helpers import load_config, load_env, setup_logger
-from workers.db import get_conn
+from workers.db import use_conn
 
 
 def send_telegram(message, logger):
@@ -27,35 +27,34 @@ def run():
     config = load_config()
     load_env()
     logger = setup_logger("w4")
-    conn = get_conn()
 
-    subs = conn.execute(
-        """SELECT name, total_ideas FROM subreddits
-        WHERE total_ideas > 0
-        AND last_parsed_at <= datetime('now', ? || ' days')
-        AND queue_reparse = 0 AND active = 1""",
-        (f"-{config['reparse_days']}",),
-    ).fetchall()
+    with use_conn() as conn:
+        subs = conn.execute(
+            """SELECT name, total_ideas FROM subreddits
+            WHERE total_ideas > 0
+            AND last_parsed_at <= datetime('now', ? || ' days')
+            AND queue_reparse = 0 AND active = 1""",
+            (f"-{config['reparse_days']}",),
+        ).fetchall()
 
-    sent = 0
-    for sub in subs:
-        top_idea = conn.execute(
-            """SELECT title, score FROM ideas
-            WHERE subreddits LIKE ? ORDER BY score DESC LIMIT 1""",
-            (f'%{sub["name"]}%',),
-        ).fetchone()
+        sent = 0
+        for sub in subs:
+            top_idea = conn.execute(
+                """SELECT title, score FROM ideas
+                WHERE subreddits LIKE ? ORDER BY score DESC LIMIT 1""",
+                (f'%"{sub["name"]}"%',),
+            ).fetchone()
 
-        if top_idea:
-            msg = (
-                f"\U0001f4cc Пора перепарсить: r/{sub['name']}\n"
-                f"Неделю назад здесь нашли {sub['total_ideas']} идей\n"
-                f"Лучшая: {top_idea['title']} (⭐{top_idea['score']})\n"
-                f"Добавить в очередь? → /reparse_{sub['name']}"
-            )
-            if send_telegram(msg, logger):
-                sent += 1
+            if top_idea:
+                msg = (
+                    f"\U0001f4cc Пора перепарсить: r/{sub['name']}\n"
+                    f"Неделю назад здесь нашли {sub['total_ideas']} идей\n"
+                    f"Лучшая: {top_idea['title']} (⭐{top_idea['score']})\n"
+                    f"Добавить в очередь? → /reparse_{sub['name']}"
+                )
+                if send_telegram(msg, logger):
+                    sent += 1
 
-    conn.close()
     logger.info(f"W4: sent {sent} reparse reminders")
 
 

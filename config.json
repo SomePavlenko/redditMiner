@@ -1,0 +1,16 @@
+{
+  "topic": "job search",
+  "min_upvotes": 50,
+  "reddit_posts_per_request": 100,
+  "claude_batch_size": 20,
+  "digest_min_ideas": 3,
+  "idea_score_threshold": 7,
+  "idea_dedup_similarity_threshold": 0.6,
+  "reparse_days": 7,
+  "claude_retry_attempts": 3,
+  "claude_retry_backoff_seconds": 2,
+  "cron_parser": "0 2 * * *",
+  "cron_analyzer": "0 3 * * *",
+  "cron_digest": "0 4 * * *",
+  "cron_reparse_check": "0 5 * * *"
+}

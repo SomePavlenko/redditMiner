@@ -7,6 +7,11 @@ __pycache__/
 .env
 .env.local
 
+# Data
+data/miner.db
+logs/
+.topic_hash
+
 # IDE
 .idea/
 .vscode/

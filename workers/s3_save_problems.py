@@ -11,23 +11,10 @@ import json
 import os
 from pathlib import Path
 from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response, ROOT
+from prompts import S3_ANALYZE_PAINS
 from workers.db import use_conn
 
 BATCHES_DIR = Path(os.path.join(ROOT, "data", "batches"))
-
-ANALYSIS_PROMPT = """You analyze Reddit posts to find user pain points that can be solved with software.
-
-For each post, extract ONLY specific pains:
-- What doesn't work, what frustrates, what people want improved
-- Focus on pains solvable by a SaaS tool, web service, API, browser extension, or bot
-- Ignore: vague complaints, political opinions, emotional venting without actionable problem
-
-Posts:
-{posts_json}
-
-Return ONLY JSON array, no markdown:
-[{{"post_db_id": 123, "subreddit": "jobs", "problems": ["pain 1", "pain 2"], "url": "https://..."}}]
-Empty problems array if no software-solvable pains found."""
 
 
 def analyze_batch(batch_file, config, logger):
@@ -38,7 +25,7 @@ def analyze_batch(batch_file, config, logger):
     if not posts:
         return []
 
-    prompt = ANALYSIS_PROMPT.format(posts_json=json.dumps(posts, ensure_ascii=False))
+    prompt = S3_ANALYZE_PAINS.format(posts_json=json.dumps(posts, ensure_ascii=False))
     raw = claude_call(config["claude_model_fast"], prompt, config, logger)
     return parse_json_response(raw, logger)
 

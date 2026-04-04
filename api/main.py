@@ -114,6 +114,45 @@ def toggle_favourite(idea_id: int):
         return {"id": idea_id, "is_favourite": new_val}
 
 
+@app.post("/api/ideas/{idea_id}/deep-analysis")
+async def run_deep_analysis(idea_id: int):
+    from prompts import DEEP_ANALYSIS
+
+    with use_conn() as conn:
+        idea = conn.execute("SELECT * FROM ideas WHERE id=?", (idea_id,)).fetchone()
+        if not idea:
+            raise HTTPException(status_code=404, detail="Idea not found")
+        if idea["deep_analysis_done"]:
+            return {"id": idea_id, "status": "already_done", "result": idea["deep_analysis_result"]}
+
+    config = load_config()
+    from workers.helpers import load_env, claude_call
+    load_env()
+
+    prompt = DEEP_ANALYSIS.format(
+        title=idea["title"] or "",
+        pain=idea["pain"] or "",
+        solution=idea["solution"] or "",
+        where_we_meet_user=idea["where_we_meet_user"] or "",
+        monetization=idea["monetization"] or "",
+        competition_level=idea["competition_level"] or "",
+    )
+
+    try:
+        result = claude_call(config["claude_model_smart"], prompt, config, __import__("logging").getLogger("api"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Claude API error: {e}")
+
+    with use_conn() as conn:
+        conn.execute(
+            "UPDATE ideas SET deep_analysis_done=1, deep_analysis_result=? WHERE id=?",
+            (result, idea_id),
+        )
+        conn.commit()
+
+    return {"id": idea_id, "status": "done", "result": result}
+
+
 @app.get("/api/subreddits")
 def get_subreddits(topic: str = None, active: int = None):
     with use_conn() as conn:

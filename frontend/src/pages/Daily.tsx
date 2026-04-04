@@ -18,6 +18,16 @@ interface Idea {
   source_urls: string
   is_favourite: number
   created_at: string
+  pain: string
+  solution: string
+  where_we_meet_user: string
+  monetization: string
+  monetization_type: string
+  competition_level: string
+  competition_note: string
+  validation_step: string
+  deep_analysis_done: number
+  deep_analysis_result: string
 }
 
 interface Config {

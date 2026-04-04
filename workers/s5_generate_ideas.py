@@ -8,6 +8,7 @@ python3 -m workers.s5_generate_ideas
 
 import json
 from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response
+from prompts import S5_GENERATE_IDEAS
 from workers.db import use_conn
 
 
@@ -24,62 +25,6 @@ def is_duplicate(new_title, existing_titles, threshold):
             return True
     return False
 
-
-IDEA_PROMPT = """You are a product analyst finding SaaS opportunities for a 2-developer team.
-Topic: "{topic}"
-
-CONTEXT:
-- Team: 2 developers (frontend + backend), both can orchestrate with AI
-- Goal: find pain → build MVP in 2-4 weeks → validate demand → scale if works
-- ONLY software products: SaaS, web service, API, browser extension, bot, CLI tool
-- Revenue: subscription, one-time purchase, or freemium — NO marketplace, NO people-dependent models
-- Target: Russia first, then international
-- Must work WITHOUT network effects — product sells itself
-
-PAIN CLUSTERS (sorted by pain_score):
-{clusters_json}
-
-TASK:
-Generate 5-10 SaaS product ideas that solve these pains.
-
-For each idea return JSON:
-{{
-  "title": "Product name (3-5 words)",
-  "description": "What pain it solves and how. Why people will pay. (2-3 sentences, in Russian)",
-  "product_example": "Concrete MVP: what UI, what it does, core feature (2-3 sentences, in Russian)",
-  "solves_clusters": [1, 3],
-  "feasibility": 7,
-  "uniqueness": 8,
-  "revenue_model": "subscription/freemium/one-time"
-}}
-
-SCORING GUIDE:
-
-feasibility (1-10) — can 2 devs build MVP in 2-4 weeks:
-  10: Landing + API, 1 week
-  8-9: Web app with API + frontend, 2-3 weeks
-  6-7: Needs integrations/data/ML, 3-4 weeks
-  4-5: Complex infrastructure
-  1-3: Needs 5+ people or 3+ months
-
-uniqueness (1-10) — existing alternatives:
-  10: Nothing like it exists
-  8-9: Distant analogues, don't solve this exact pain
-  6-7: Competitors exist but room to differentiate
-  4-5: Many competitors
-  1-3: Saturated market
-
-HARD RULES:
-- ONLY SaaS/tools — NO marketplaces, funds, insurance, communities, platforms-for-people
-- NO ideas requiring physical operations or manual human work to function
-- Each idea must solve at least 1 cluster
-- Quality over quantity — 5 strong > 10 weak
-- description and product_example MUST be in Russian
-
-EXISTING IDEAS (don't repeat):
-{existing_titles}
-
-Return ONLY JSON array, no markdown."""
 
 
 def run():
@@ -121,7 +66,7 @@ def run():
 
     existing_titles = [r["title"] for r in existing_ideas]
 
-    prompt = IDEA_PROMPT.format(
+    prompt = S5_GENERATE_IDEAS.format(
         topic=topic,
         clusters_json=json.dumps(clusters_for_prompt, ensure_ascii=False, indent=2),
         existing_titles=json.dumps(existing_titles, ensure_ascii=False),
@@ -172,17 +117,27 @@ def run():
                 """INSERT INTO ideas
                 (topic, title, description, product_example, revenue_model,
                  score, demand_score, breadth_score, feasibility_score, uniqueness_score,
-                 solves_clusters, subreddits, is_duplicate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 solves_clusters, subreddits, is_duplicate,
+                 pain, solution, where_we_meet_user, monetization, monetization_type,
+                 competition_level, competition_note, validation_step)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     topic, title,
                     idea.get("description", ""),
                     idea.get("product_example", ""),
-                    idea.get("revenue_model", ""),
+                    idea.get("revenue_model", idea.get("monetization_type", "")),
                     score, round(demand_score, 2), round(breadth_score, 2),
                     feasibility, uniqueness,
                     json.dumps(solves), json.dumps(list(all_subs)),
                     dup_flag,
+                    idea.get("pain", ""),
+                    idea.get("solution", ""),
+                    idea.get("where_we_meet_user", ""),
+                    idea.get("monetization", ""),
+                    idea.get("monetization_type", ""),
+                    idea.get("competition_level", ""),
+                    idea.get("competition_note", ""),
+                    idea.get("validation_step", ""),
                 ),
             )
 
@@ -203,14 +158,18 @@ def run():
 
     with use_conn() as conn:
         top = conn.execute(
-            """SELECT title, score, demand_score, feasibility_score, uniqueness_score, revenue_model
+            """SELECT title, score, pain, competition_level, monetization, validation_step
             FROM ideas WHERE topic=? AND is_duplicate=0 ORDER BY score DESC LIMIT 10""",
             (topic,),
         ).fetchall()
     print("\nТоп идеи:")
     for i in top:
+        comp = {"none": "нет рынка", "low": "слабая", "medium": "умеренная", "high": "высокая"}.get(i["competition_level"] or "", "")
         print(f"  [{i['score']:.1f}] {i['title']}")
-        print(f"    demand={i['demand_score']:.1f} feasibility={i['feasibility_score']} uniqueness={i['uniqueness_score']} model={i['revenue_model']}")
+        print(f"    Боль: {i['pain'] or ''}")
+        print(f"    Конкуренция: {comp} | Монетизация: {i['monetization'] or ''}")
+        print(f"    Первый шаг: {i['validation_step'] or ''}")
+        print()
 
 
 if __name__ == "__main__":

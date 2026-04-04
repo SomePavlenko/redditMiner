@@ -14,6 +14,7 @@ import os
 import sys
 import httpx
 from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response, ROOT
+from prompts import S0_FIND_SUBREDDITS
 from workers.db import use_conn
 
 TOPIC_HASH_FILE = os.path.join(ROOT, ".topic_hash")
@@ -61,14 +62,7 @@ def find_subreddits_via_api(topic, config, logger):
     """Находит сабреддиты через Claude API."""
     load_env()
 
-    prompt = f"""Find 15-20 subreddits on Reddit where people discuss problems related to: "{topic}"
-
-I need subreddits where users COMPLAIN, ask for help, discuss what doesn't work.
-Not news or entertainment subreddits.
-
-Return ONLY a JSON array, no markdown:
-[{{"name": "subredditname", "relevance_score": 9}}]
-Sort by relevance_score DESC. Use real subreddit names without r/ prefix."""
+    prompt = S0_FIND_SUBREDDITS.format(topic=topic)
 
     raw = claude_call(config["claude_model_fast"], prompt, config, logger)
     subs = parse_json_response(raw, logger)

@@ -113,6 +113,16 @@ def init_db():
         _migrate(conn, "ideas", "feasibility_score", "REAL DEFAULT 0")
         _migrate(conn, "ideas", "revenue_model", "TEXT")
         _migrate(conn, "ideas", "solves_clusters", "TEXT")
+        _migrate(conn, "ideas", "pain", "TEXT")
+        _migrate(conn, "ideas", "solution", "TEXT")
+        _migrate(conn, "ideas", "where_we_meet_user", "TEXT")
+        _migrate(conn, "ideas", "monetization", "TEXT")
+        _migrate(conn, "ideas", "monetization_type", "TEXT")
+        _migrate(conn, "ideas", "competition_level", "TEXT")
+        _migrate(conn, "ideas", "competition_note", "TEXT")
+        _migrate(conn, "ideas", "validation_step", "TEXT")
+        _migrate(conn, "ideas", "deep_analysis_done", "INTEGER DEFAULT 0")
+        _migrate(conn, "ideas", "deep_analysis_result", "TEXT")
 
 
 def _migrate(conn, table, column, col_type):

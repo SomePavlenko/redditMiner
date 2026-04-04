@@ -10,6 +10,7 @@ python3 -m workers.s4_cluster_problems
 import json
 import math
 from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response
+from prompts import S4_CLUSTER_PROBLEMS
 from workers.db import use_conn
 
 
@@ -40,28 +41,11 @@ def run():
         for p in problems
     ]
 
-    prompt = f"""You are a user pain analyst. Topic: "{topic}"
-
-Below are {len(problems_list)} user pain points from Reddit.
-Many describe the same problem in different words.
-
-TASK:
-1. Group similar pains into clusters (5-20 clusters)
-2. Give each a short name (3-5 words, in Russian)
-3. Write summary — essence of the pain in 1-2 sentences (in Russian)
-4. Focus on pains that could be solved with software/SaaS
-
-Return ONLY JSON array, no markdown:
-[{{"cluster_name": "Название кластера", "summary": "Суть проблемы", "problem_ids": [1, 5, 12]}}]
-
-RULES:
-- One problem can only be in one cluster
-- No "Other" or "Miscellaneous" clusters
-- Names must be specific: "ATS rejects resumes" not "Resume problems"
-- cluster_name and summary MUST be in Russian
-
-Pains:
-{json.dumps(problems_list, ensure_ascii=False)}"""
+    prompt = S4_CLUSTER_PROBLEMS.format(
+        topic=topic,
+        problems_count=len(problems_list),
+        problems_json=json.dumps(problems_list, ensure_ascii=False),
+    )
 
     logger.info(f"S4: sending {len(problems_list)} problems to Claude for clustering")
     raw = claude_call(config["claude_model_fast"], prompt, config, logger)

@@ -22,6 +22,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from workers.helpers import load_config
+from prompts import TEST_BATCH_PROMPT
 from workers.trimmer import trim_posts, trim_comments
 from workers.db import use_conn, init_db
 
@@ -180,11 +181,7 @@ def step4_prepare_batch():
         })
 
     batch_obj = {
-        "_prompt": (
-            "Проанализируй посты ниже. Для каждого найди конкретные боли пользователей. "
-            "Запиши в data/miner.db таблица problems (raw_post_id, subreddit, problem, upvotes, source_url). "
-            "Пометь посты processed=1 в raw_posts."
-        ),
+        "_prompt": TEST_BATCH_PROMPT,
         "posts": batch_data,
     }
 

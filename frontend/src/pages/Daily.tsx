@@ -54,10 +54,6 @@ export default function Daily() {
     fetchIdeas()
   }
 
-  const runWorker = async (w: string) => {
-    await fetch(`/api/workers/run/${w}`, { method: 'POST' })
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -74,19 +70,11 @@ export default function Daily() {
           <button
             onClick={() => setView('bubbles')}
             className={`px-3 py-1 rounded text-sm ${view === 'bubbles' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}
-          >Пузыри</button>
+          >Граф</button>
           <button
             onClick={() => setView('list')}
             className={`px-3 py-1 rounded text-sm ${view === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}
           >Список</button>
-        </div>
-        <div className="ml-auto flex gap-2">
-          {['s1', 's2', 's3'].map(w => (
-            <button key={w} onClick={() => runWorker(w)}
-              className="px-3 py-1 bg-gray-800 rounded text-xs hover:bg-gray-700 uppercase">{w}</button>
-          ))}
-          <button onClick={() => runWorker('pipeline')}
-            className="px-3 py-1 bg-indigo-600 rounded text-xs hover:bg-indigo-500">Все</button>
         </div>
       </div>
 

@@ -32,6 +32,9 @@ def run():
         print("Нет болей для кластеризации")
         return
 
+    # Ограничиваем до 150 топ болей чтобы влезть в контекст
+    problems = problems[:150]
+
     problems_list = [
         {"id": p["id"], "problem": p["problem"], "subreddit": p["subreddit"], "upvotes": p["upvotes"]}
         for p in problems

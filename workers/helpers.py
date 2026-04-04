@@ -65,14 +65,14 @@ def parse_json_response(raw, logger):
     return json.loads(raw)
 
 
-def claude_call(model, prompt, config, logger):
+def claude_call(model, prompt, config, logger, max_tokens=8192):
     client = _get_client()
     for attempt in range(config["claude_retry_attempts"]):
         try:
             response = client.messages.create(
                 model=model,
-                max_tokens=4096,
-                timeout=120.0,
+                max_tokens=max_tokens,
+                timeout=180.0,
                 messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text

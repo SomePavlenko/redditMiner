@@ -8,18 +8,27 @@ Double braces {{}} are escaped literals for JSON examples.
 # ─────────────────────────────────────────────
 # S0 — Find subreddits
 # ─────────────────────────────────────────────
-S0_FIND_SUBREDDITS = """Find subreddits where people discuss real problems related to: "{topic}"
+S0_FIND_SUBREDDITS = """Find subreddits where people have problems related to "{topic}" that could be solved with a software product (SaaS, browser extension, bot, API, CLI tool).
 
-You need subreddits where:
-- People share pains and frustrations
-- Discuss tools and their shortcomings
-- Seek solutions and recommendations
-- Active discussions (not just news)
+You need subreddits where people:
+- Complain about broken workflows, manual repetitive tasks, lack of tools
+- Discuss existing tools and their shortcomings (= proven willingness to pay)
+- Ask "is there a tool that does X?" or "how do I automate Y?"
+- Share specific frustrations, not just vent emotions
 
-NOT needed: news subreddits, memes, general chat without problems.
+GOOD signals (people would pay for a solution):
+  r/cscareerquestions — "I spend hours tailoring each resume" (automatable pain)
+  r/freelance — "invoicing clients is a nightmare" (clear SaaS opportunity)
+
+BAD signals (no software product fits):
+  r/rant — emotional venting, no actionable problem
+  r/news — passive consumption, no pain
+  r/askreddit — entertainment, not problem-solving
+
+NOT needed: news, memes, emotional support, general discussion without actionable problems.
 
 Return ONLY JSON, no markdown:
-[{{"name": "subreddit name without r/", "why": "one line why this sub has pains on the topic", "relevance_score": 8}}]
+[{{"name": "subreddit name without r/", "why": "what software-solvable pain people discuss there", "relevance_score": 8}}]
 
 Sort by relevance_score DESC. Max 20 subreddits."""
 

@@ -41,11 +41,13 @@ export default function Daily() {
   const [view, setView] = useState<'bubbles' | 'list'>('list')
 
   const fetchIdeas = useCallback(() => {
-    fetch(`/api/ideas?date=${date}`)
+    const params = new URLSearchParams({ date })
+    if (config.topic) params.set('topic', config.topic)
+    fetch(`/api/ideas?${params}`)
       .then(r => r.json())
       .then(setIdeas)
       .catch(() => {})
-  }, [date])
+  }, [date, config.topic])
 
   useEffect(() => {
     fetch('/api/config').then(r => r.json()).then(setConfig).catch(() => {})

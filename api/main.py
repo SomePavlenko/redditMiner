@@ -338,6 +338,8 @@ async def run_pipeline_stream(
             save_config(cfg)
             yield f"data: {json.dumps({'type': 'log', 'text': f'Параметры прогона: {overrides}'}, ensure_ascii=False)}\n\n"
 
+        run_topic = cfg.get("topic", "")
+
         for stage_id, stage_name, module in STAGES:
             yield f"data: {json.dumps({'type': 'stage_start', 'stage': stage_id, 'name': stage_name})}\n\n"
 
@@ -364,25 +366,24 @@ async def run_pipeline_stream(
             else:
                 yield f"data: {json.dumps({'type': 'stage_done', 'stage': stage_id, 'elapsed': elapsed})}\n\n"
 
-        # Collect summary
-        current_topic = load_config().get("topic", "")
+        # Collect summary — use run_topic saved at start, not current config
         with use_conn() as conn:
             summary = {
                 "type": "done",
                 "success": True,
-                "topic": current_topic,
+                "topic": run_topic,
                 "stats": {
-                    "posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (current_topic,)).fetchone()[0],
-                    "problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (current_topic,)).fetchone()[0],
-                    "clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (current_topic,)).fetchone()[0],
-                    "ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (current_topic,)).fetchone()[0],
+                    "posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (run_topic,)).fetchone()[0],
+                    "problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (run_topic,)).fetchone()[0],
+                    "clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (run_topic,)).fetchone()[0],
+                    "ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (run_topic,)).fetchone()[0],
                 },
                 "top_ideas": [
                     dict(r) for r in conn.execute(
                         """SELECT id, title, score, pain, competition_level, monetization, validation_step
                         FROM ideas WHERE topic=? AND is_duplicate=0
                         ORDER BY score DESC LIMIT 5""",
-                        (current_topic,),
+                        (run_topic,),
                     ).fetchall()
                 ],
                 "top_clusters": [
@@ -390,7 +391,7 @@ async def run_pipeline_stream(
                         """SELECT id, cluster_name, pain_score, frequency, summary
                         FROM pain_clusters WHERE topic=?
                         ORDER BY pain_score DESC LIMIT 5""",
-                        (current_topic,),
+                        (run_topic,),
                     ).fetchall()
                 ],
             }

@@ -1,28 +1,22 @@
 {
-  "_doc": "Reddit Miner — все настройки. Описание: docs/config_reference.md",
-
-  "topic": "job search, jobs, resumes, careerguidance",
-
+  "_doc": "Reddit Miner \u2014 \u0432\u0441\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438. \u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435: docs/config_reference.md",
+  "topic": "solo founder problems &  founder pain & workflow",
   "min_upvotes": 50,
   "reddit_posts_per_request": 100,
   "reddit_api_limit": 55,
-
   "body_max_chars": 300,
   "comment_max_chars": 200,
   "comments_top_n": 10,
   "posts_for_comments_n": 15,
-
   "claude_model_fast": "claude-haiku-4-5-20251001",
   "claude_model_smart": "claude-sonnet-4-20250514",
   "claude_batch_size": 20,
   "digest_min_ideas": 3,
   "idea_score_threshold": 7,
   "idea_dedup_similarity_threshold": 0.6,
-
   "reparse_days": 7,
   "claude_retry_attempts": 3,
   "claude_retry_backoff_seconds": 2,
-
   "cron_parser": "0 2 * * *",
   "cron_analyzer": "0 3 * * *",
   "cron_digest": "0 4 * * *",

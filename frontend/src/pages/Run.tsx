@@ -75,6 +75,13 @@ export default function Run() {
   const [phase, setPhase] = useState<Phase>('setup')
   const [config, setConfig] = useState<Config | null>(null)
   const [topicOverride, setTopicOverride] = useState('')
+  const [params, setParams] = useState({
+    min_upvotes: 50,
+    reddit_api_limit: 55,
+    posts_for_comments_n: 15,
+    claude_batch_size: 20,
+    body_max_chars: 300,
+  })
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [activeStage, setActiveStage] = useState<string | null>(null)
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set())
@@ -86,6 +93,13 @@ export default function Run() {
     fetch('/api/config').then(r => r.json()).then((c: Config) => {
       setConfig(c)
       setTopicOverride(c.topic)
+      setParams({
+        min_upvotes: c.min_upvotes ?? 50,
+        reddit_api_limit: c.reddit_api_limit ?? 55,
+        posts_for_comments_n: c.posts_for_comments_n ?? 15,
+        claude_batch_size: c.claude_batch_size ?? 20,
+        body_max_chars: c.body_max_chars ?? 300,
+      })
     }).catch(() => {})
   }, [])
 
@@ -101,8 +115,14 @@ export default function Run() {
     setFailedStage(null)
     setResult(null)
 
-    const params = topicOverride !== config?.topic ? `?topic=${encodeURIComponent(topicOverride)}` : ''
-    const evtSource = new EventSource(`/api/run/stream${params}`)
+    const qp = new URLSearchParams()
+    if (topicOverride) qp.set('topic', topicOverride)
+    qp.set('min_upvotes', String(params.min_upvotes))
+    qp.set('reddit_api_limit', String(params.reddit_api_limit))
+    qp.set('posts_for_comments_n', String(params.posts_for_comments_n))
+    qp.set('claude_batch_size', String(params.claude_batch_size))
+    qp.set('body_max_chars', String(params.body_max_chars))
+    const evtSource = new EventSource(`/api/run/stream?${qp}`)
 
     evtSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
@@ -157,16 +177,30 @@ export default function Run() {
 
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader><CardTitle className="text-base">Параметры</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="flex justify-between"><span className="text-gray-400">Мин. апвоутов</span><span className="text-gray-200">{config.min_upvotes}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Reddit лимит</span><span className="text-gray-200">{config.reddit_api_limit} запросов</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Топ постов</span><span className="text-gray-200">150</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Комментов к постам</span><span className="text-gray-200">{config.posts_for_comments_n}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Размер батча</span><span className="text-gray-200">{config.claude_batch_size || 40}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Body лимит</span><span className="text-gray-200">{config.body_max_chars} символов</span></div>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {([
+                ['min_upvotes', 'Мин. апвоутов', ''],
+                ['reddit_api_limit', 'Reddit лимит', 'запросов'],
+                ['posts_for_comments_n', 'Комментов к постам', ''],
+                ['claude_batch_size', 'Размер батча', ''],
+                ['body_max_chars', 'Body лимит', 'символов'],
+              ] as const).map(([key, label, suffix]) => (
+                <div key={key} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-gray-400">{label}</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={params[key]}
+                      onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) || 0 }))}
+                      className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right text-gray-100 focus:border-indigo-500 focus:outline-none"
+                    />
+                    {suffix && <span className="text-xs text-gray-500">{suffix}</span>}
+                  </div>
+                </div>
+              ))}
             </div>
-            <p className="text-xs text-gray-600">Параметры из config.json. Для изменения отредактируй файл.</p>
+            <p className="text-xs text-gray-600 mt-3">Значения для этого прогона. Конфиг не меняется.</p>
           </CardContent>
         </Card>
 

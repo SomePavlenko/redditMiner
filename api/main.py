@@ -303,19 +303,40 @@ STAGES = [
 
 
 @app.get("/api/run/stream")
-async def run_pipeline_stream(topic: str = None):
-    """Runs the full pipeline and streams logs as SSE events."""
+async def run_pipeline_stream(
+    topic: str = None,
+    min_upvotes: int = None,
+    reddit_api_limit: int = None,
+    posts_for_comments_n: int = None,
+    claude_batch_size: int = None,
+    body_max_chars: int = None,
+):
+    """Runs the full pipeline and streams logs as SSE events.
+    Params override config for this run only."""
 
     async def generate():
         import time
 
-        # If topic override provided, temporarily update config
+        # Apply overrides to config for this run
+        cfg = load_config()
+        overrides = {}
         if topic:
-            cfg = load_config()
-            old_topic = cfg.get("topic")
-            cfg["topic"] = topic
+            overrides["topic"] = topic
+        if min_upvotes is not None:
+            overrides["min_upvotes"] = min_upvotes
+        if reddit_api_limit is not None:
+            overrides["reddit_api_limit"] = reddit_api_limit
+        if posts_for_comments_n is not None:
+            overrides["posts_for_comments_n"] = posts_for_comments_n
+        if claude_batch_size is not None:
+            overrides["claude_batch_size"] = claude_batch_size
+        if body_max_chars is not None:
+            overrides["body_max_chars"] = body_max_chars
+
+        if overrides:
+            cfg.update(overrides)
             save_config(cfg)
-            yield f"data: {json.dumps({'type': 'log', 'text': f'Тема: {topic}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'log', 'text': f'Параметры прогона: {overrides}'}, ensure_ascii=False)}\n\n"
 
         for stage_id, stage_name, module in STAGES:
             yield f"data: {json.dumps({'type': 'stage_start', 'stage': stage_id, 'name': stage_name})}\n\n"

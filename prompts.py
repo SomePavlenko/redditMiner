@@ -1,234 +1,230 @@
 """
-Все промпты для Claude API в одном месте.
+All prompts for Claude API in one place.
 
-Переменные в {фигурных скобках} подставляются через .format() в воркерах.
-Двойные скобки {{}} — экранированные литералы для JSON-примеров.
+Variables in {curly braces} are substituted via .format() in workers.
+Double braces {{}} are escaped literals for JSON examples.
 """
 
 # ─────────────────────────────────────────────
-# S0 — Поиск сабреддитов
+# S0 — Find subreddits
 # ─────────────────────────────────────────────
-S0_FIND_SUBREDDITS = """Ты ищешь сабреддиты где люди жалуются на реальные проблемы
-связанные с темой: "{topic}"
+S0_FIND_SUBREDDITS = """Find subreddits where people discuss real problems related to: "{topic}"
 
-Тебе нужны сабреддиты где:
-- люди делятся болями и frustration
-- обсуждают инструменты и их недостатки
-- ищут решения и рекомендации
-- есть живые дискуссии (не просто новости)
+You need subreddits where:
+- People share pains and frustrations
+- Discuss tools and their shortcomings
+- Seek solutions and recommendations
+- Active discussions (not just news)
 
-НЕ нужны: новостные сабреддиты, мемы, общий треп без проблем.
+NOT needed: news subreddits, memes, general chat without problems.
 
-Верни ТОЛЬКО JSON, без markdown:
-[{{"name": "название без r/", "why": "одна строка почему там есть боли по теме", "relevance_score": 8}}]
+Return ONLY JSON, no markdown:
+[{{"name": "subreddit name without r/", "why": "one line why this sub has pains on the topic", "relevance_score": 8}}]
 
-Отсортируй по relevance_score DESC.
-Максимум 20 сабреддитов."""
+Sort by relevance_score DESC. Max 20 subreddits."""
 
 # ─────────────────────────────────────────────
-# S3 — Извлечение болей из постов
+# S3 — Extract pains from posts
 # ─────────────────────────────────────────────
-S3_ANALYZE_PAINS = """Ты извлекаешь боли пользователей из постов Reddit.
+S3_ANALYZE_PAINS = """You extract user pain points from Reddit posts.
 
-Тема исследования: {topic}
+Research topic: {topic}
 
-ПРАВИЛА:
-Хорошая боль — конкретная, с деталью:
-  + "трачу 3 часа в неделю на ручное обновление таблиц"
-  + "ATS системы отклоняют моё резюме до живого человека"
-  + "не могу понять почему меня игнорируют после первого интервью"
+RULES:
+Good pain — specific, with detail:
+  + "I spend 3 hours a week manually updating spreadsheets"
+  + "ATS systems reject my resume before a human ever sees it"
+  + "I can't figure out why I get ghosted after the first interview"
 
-Плохая боль — абстрактная, без зацепки:
-  - "всё сложно"
-  - "никто не отвечает"
-  - "рынок труда ужасен"
+Bad pain — abstract, no actionable hook:
+  - "everything is hard"
+  - "nobody responds"
+  - "the job market is terrible"
 
-ВАЖНО:
-- Извлекай боль только из текста поста и комментариев
-- Не додумывай то чего нет в тексте
-- Если боли нет — верни пустой массив problems, не выдумывай
-- Один пост может дать 0, 1 или несколько болей
+IMPORTANT:
+- Extract pains ONLY from the post text and comments
+- Do NOT invent pains that aren't in the text
+- If no pain exists — return empty problems array, do not fabricate
+- One post can yield 0, 1, or several pains
 
-Посты для анализа:
+Posts to analyze:
 {posts_json}
 
-Верни ТОЛЬКО JSON без markdown:
-[{{"post_db_id": 123, "problems": ["конкретная боль первая", "конкретная боль вторая"]}}]"""
+Return ONLY JSON, no markdown:
+[{{"post_db_id": 123, "problems": ["specific pain one", "specific pain two"]}}]"""
 
 # ─────────────────────────────────────────────
-# S4 — Кластеризация болей
+# S4 — Cluster pains
 # ─────────────────────────────────────────────
-S4_CLUSTER_PROBLEMS = """Ты аналитик пользовательских болей. Тема: "{topic}"
+S4_CLUSTER_PROBLEMS = """You are a user pain analyst. Topic: "{topic}"
 
-Ниже {problems_count} болей пользователей из Reddit.
-Многие описывают одну и ту же проблему разными словами.
+Below are {problems_count} user pain points from Reddit.
+Many describe the same problem in different words.
 
-ЗАДАЧА:
-1. Сгруппируй похожие боли в кластеры (5-20 кластеров)
-2. Дай каждому короткое название (3-5 слов, по-русски)
-3. Напиши summary — суть боли в 1-2 предложениях (по-русски)
-4. Фокус на болях которые можно решить софтом/SaaS
+TASK:
+1. Group similar pains into clusters (5-20 clusters)
+2. Give each a short name (3-5 words)
+3. Write summary — essence of the pain in 1-2 sentences
+4. Focus on pains solvable with software/SaaS
 
-Верни ТОЛЬКО JSON без markdown:
-[{{"cluster_name": "Название кластера", "summary": "Суть проблемы", "problem_ids": [1, 5, 12]}}]
+Return ONLY JSON, no markdown:
+[{{"cluster_name": "Cluster Name", "summary": "Pain essence", "problem_ids": [1, 5, 12]}}]
 
-ПРАВИЛА:
-- Одна боль может быть только в одном кластере
-- Никаких кластеров "Другое" или "Разное"
-- Названия должны быть конкретными: "ATS отклоняет резюме" а не "Проблемы с резюме"
-- cluster_name и summary ОБЯЗАТЕЛЬНО на русском
+RULES:
+- One pain can only be in one cluster
+- No "Other" or "Miscellaneous" clusters
+- Names must be specific: "ATS rejects resumes" not "Resume problems"
 
-Боли:
+Pains:
 {problems_json}"""
 
 # ─────────────────────────────────────────────
-# S5 — Генерация идей
+# S5 — Generate ideas (runs on Sonnet)
 # ─────────────────────────────────────────────
-S5_GENERATE_IDEAS = """Ты product researcher. Твоя задача — найти бизнес-идеи
-которые решают реальные боли и на которых можно зарабатывать.
+S5_GENERATE_IDEAS = """You are a product researcher. Find business ideas that solve real pains and can generate revenue.
 
-Тема: {topic}
+Topic: {topic}
 
-КОНТЕКСТ:
-- Команда: 2 разработчика (frontend + backend), оба умеют оркестрировать AI
-- Цель: найти боль → MVP за 2-4 недели → проверить спрос → масштабировать
-- ТОЛЬКО софт: SaaS, веб-сервис, API, расширение браузера, бот, CLI
-- Монетизация: подписка, разовая покупка, freemium — НЕ маркетплейс, НЕ модель завязанная на людях
-- Должно работать БЕЗ сетевых эффектов — продукт продаёт себя сам
+CONTEXT:
+- Team: 2 developers (frontend + backend), both can orchestrate AI
+- Goal: find pain → build MVP in 2-4 weeks → validate demand → scale
+- ONLY software: SaaS, web service, API, browser extension, bot, CLI tool
+- Revenue: subscription, one-time, freemium — NO marketplace, NO people-dependent models
+- Must work WITHOUT network effects — product sells itself
 
-КЛАСТЕРЫ БОЛЕЙ (отсортированы по pain_score):
+PAIN CLUSTERS (sorted by pain_score):
 {clusters_json}
 
 ---
 
-ПЕРЕД ТЕМ КАК ПРЕДЛОЖИТЬ ИДЕЮ — убей её:
+BEFORE PROPOSING AN IDEA — kill it:
 
-1. Кто конкретно заплатит и почему прямо сейчас, а не через год?
-2. Почему это ещё не решили 10 стартапов с деньгами?
-3. Можно ли закрыть эту боль бесплатным ChatGPT промптом?
+1. Who exactly will pay and why right now, not in a year?
+2. Why haven't 10 funded startups solved this already?
+3. Can this pain be closed with a free ChatGPT prompt?
 
-Если идея выживает после этих вопросов — она сильная.
-
----
-
-КРИТЕРИИ:
-
-Конкуренция:
-  medium = ХОРОШО (спрос доказан, люди платят)
-  none = ПЛОХО (рынка нет или боль не настоящая)
-  high = сложно, нужно очень чёткое преимущество
-
-Монетизация — только с цифрами:
-  НЕТ: "подписка"
-  ДА: "freemium: 5 использований бесплатно, $9/мес безлимит"
-
-Место встречи с пользователем — конкретное:
-  НЕТ: "в процессе работы"
-  ДА: "прямо на странице вакансии в LinkedIn"
-  ДА: "в момент когда получил rejection email"
-
-feasibility (1-10) — могут ли 2 разработчика собрать MVP за 2-4 недели:
-  10: Лендинг + API, 1 неделя
-  8-9: Веб-приложение с API + фронтом, 2-3 недели
-  6-7: Нужны интеграции/данные/ML, 3-4 недели
-  4-5: Сложная инфраструктура
-  1-3: Нужно 5+ человек или 3+ месяца
-
-uniqueness (1-10) — существующие альтернативы:
-  10: Ничего подобного нет
-  8-9: Далёкие аналоги
-  6-7: Конкуренты есть но можно отстроиться
-  4-5: Много конкурентов
-  1-3: Перенасыщенный рынок
+If the idea survives these questions — it's strong.
 
 ---
 
-Уже найденные идеи за последние 30 дней (не повторять):
+CRITERIA:
+
+Competition:
+  medium = GOOD (demand proven, people pay)
+  none = BAD (no market or pain isn't real)
+  high = hard, need very clear advantage
+
+Monetization — numbers only:
+  NO: "subscription"
+  YES: "freemium: 5 uses free, $9/mo unlimited"
+
+Where we meet the user — be specific:
+  NO: "during their workflow"
+  YES: "on the job listing page on LinkedIn"
+  YES: "the moment they receive a rejection email"
+
+feasibility (1-10) — can 2 devs build MVP in 2-4 weeks:
+  10: Landing + API, 1 week
+  8-9: Web app with API + frontend, 2-3 weeks
+  6-7: Needs integrations/data/ML, 3-4 weeks
+  4-5: Complex infrastructure
+  1-3: Needs 5+ people or 3+ months
+
+uniqueness (1-10) — existing alternatives:
+  10: Nothing like it exists
+  8-9: Distant analogues
+  6-7: Competitors exist but room to differentiate
+  4-5: Many competitors
+  1-3: Saturated market
+
+---
+
+Existing ideas from last 30 days (do not repeat):
 {existing_titles}
 
 ---
 
-СКОЛЬКО ИДЕЙ:
-- Минимум 3, максимум 10
-- Лучше 4 честных чем 8 натянутых
-- Если идея слабая — не включай
+HOW MANY IDEAS:
+- Minimum 3, maximum 10
+- Better 4 honest than 8 stretched
+- If an idea is weak — don't include it
 
 ---
 
-Верни ТОЛЬКО JSON без markdown:
+Return ONLY JSON, no markdown:
 [{{
-  "title": "конкретное название продукта",
-  "pain": "одно предложение: какая боль и где она возникает",
-  "solution": "одно предложение: что делает продукт",
-  "description": "2-3 предложения подробнее, по-русски",
-  "product_example": "конкретный MVP: что за UI, что делает, ключевая фича (2-3 предложения, по-русски)",
-  "where_we_meet_user": "конкретный момент и место где встречаем пользователя с этой болью",
-  "monetization": "конкретная модель с цифрами",
+  "title": "specific product name",
+  "pain": "one sentence: what pain and where it occurs",
+  "solution": "one sentence: what the product does",
+  "description": "2-3 sentences with more detail",
+  "product_example": "concrete MVP: what UI, what it does, key feature (2-3 sentences)",
+  "where_we_meet_user": "specific moment and place where the user experiences this pain",
+  "monetization": "specific model with numbers",
   "monetization_type": "saas_subscription | one_time | freemium | b2b_license",
   "revenue_model": "subscription",
   "competition_level": "none | low | medium | high",
-  "competition_note": "кто конкуренты и в чём наше преимущество",
-  "validation_step": "одно действие на 2 часа чтобы проверить спрос: какой пост, на каком сабреддите, с каким вопросом",
+  "competition_note": "who are competitors and what's our advantage",
+  "validation_step": "one action in 2 hours to validate demand: what post, which subreddit, what question",
   "solves_clusters": [1, 3],
   "feasibility": 7,
   "uniqueness": 8
 }}]"""
 
 # ─────────────────────────────────────────────
-# Deep Analysis — глубокий разбор одной идеи
+# Deep Analysis — deep dive on a single idea
 # ─────────────────────────────────────────────
-DEEP_ANALYSIS = """Ты адвокат дьявола и стратег одновременно.
+DEEP_ANALYSIS = """You are a devil's advocate and strategist.
 
-Разбери эту бизнес-идею честно и жёстко:
+Analyze this business idea honestly and ruthlessly:
 
-Идея: {title}
-Боль: {pain}
-Решение: {solution}
-Где встречаем: {where_we_meet_user}
-Монетизация: {monetization}
-Конкуренция: {competition_level} — {competition_note}
+Idea: {title}
+Pain: {pain}
+Solution: {solution}
+Where we meet user: {where_we_meet_user}
+Monetization: {monetization}
+Competition: {competition_level} — {competition_note}
 
 ---
 
-СТРУКТУРА АНАЛИЗА:
+ANALYSIS STRUCTURE:
 
-1. КОНКУРЕНТЫ (из своих знаний)
-   Назови реальные продукты которые уже решают эту боль.
-   Для каждого: примерная цена, главная слабость.
-   Если не знаешь конкретных — честно скажи.
+1. COMPETITORS (from your knowledge)
+   Name real products that already solve this pain.
+   For each: approximate price, main weakness.
+   If you don't know specific ones — say so honestly.
 
-2. РАЗМЕР РЫНКА (грубо)
-   Сколько людей имеют эту боль?
-   Сколько из них готовы платить?
-   Грубая оценка годового дохода при 1%% конверсии.
+2. MARKET SIZE (rough)
+   How many people have this pain?
+   How many are willing to pay?
+   Rough annual revenue estimate at 1%% conversion.
 
-3. ГДЕ ВЗЯТЬ ПЕРВЫХ 10 ПОЛЬЗОВАТЕЛЕЙ
-   Конкретные места: какие сабреддиты, Slack/Discord группы,
-   Twitter поиск, ProductHunt, LinkedIn фильтры.
-   Не "найди целевую аудиторию" а буквально где сидят эти люди.
+3. WHERE TO GET FIRST 10 USERS
+   Specific places: which subreddits, Slack/Discord groups,
+   Twitter search, ProductHunt, LinkedIn filters.
+   Not "find target audience" but literally where these people hang out.
 
-4. MVP ЗА 2 НЕДЕЛИ
-   Минимальный набор функций который уже можно продавать.
-   Технический стек (конкретный, не абстрактный).
-   Что точно НЕ делать в первой версии.
+4. MVP IN 2 WEEKS
+   Minimum feature set that can already be sold.
+   Tech stack (specific, not abstract).
+   What NOT to build in v1.
 
-5. ГЛАВНЫЙ РИСК
-   Одна вещь которая убьёт эту идею если не проверить.
-   Как проверить именно этот риск за 48 часов без кода.
+5. KEY RISK
+   One thing that kills this idea if not validated.
+   How to validate this exact risk in 48 hours without code.
 
-6. ВЕРДИКТ
-   Одна строка: делать / не делать / делать если [условие]
+6. VERDICT
+   One line: do it / don't do it / do it if [condition]
 
 ---
 
-Пиши коротко и конкретно. Без воды.
-Если чего-то не знаешь — честно скажи, не выдумывай."""
+Be brief and specific. No filler.
+If you don't know something — say so honestly, don't fabricate."""
 
 # ─────────────────────────────────────────────
-# Test flow — инструкция для Claude Code в батч-файлах
+# Test flow — batch file instruction for Claude Code
 # ─────────────────────────────────────────────
 TEST_BATCH_PROMPT = (
-    "Проанализируй посты ниже. Для каждого найди конкретные боли пользователей. "
-    "Запиши в data/miner.db таблица problems (raw_post_id, subreddit, problem, upvotes, source_url). "
-    "Пометь посты processed=1 в raw_posts."
+    "Analyze the posts below. For each one find specific user pain points. "
+    "Write to data/miner.db table problems (raw_post_id, subreddit, problem, upvotes, source_url). "
+    "Mark posts as processed=1 in raw_posts."
 )

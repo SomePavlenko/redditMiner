@@ -1,12 +1,8 @@
 """
-Полный пайплайн Reddit Miner.
+Полный автоматический пайплайн Reddit Miner.
+Все стадии запускаются последовательно, без ручного вмешательства.
 
-Автоматические стадии (скрипты):
-  S0 → S1a → S1b → S2 → [СТОП: Claude Code] → S3 → S4 → [СТОП: Claude Code] → S5
-
-python3 -m workers.run_pipeline              # автоматическая часть (до первого СТОП)
-python3 -m workers.run_pipeline --after-s2   # после Claude Code: S3 → S4 → промпт
-python3 -m workers.run_pipeline --after-s4   # после Claude Code: S5
+python3 -m workers.run_pipeline
 """
 
 import time
@@ -21,7 +17,21 @@ from workers import s0_scout_subreddits, s1_fetch_reddit, s2_prepare_batches
 from workers import s3_save_problems, s4_cluster_problems, s5_generate_ideas
 
 
-def run_steps(steps, logger):
+def run():
+    logger = setup_logger("pipeline")
+    init_db()
+
+    logger.info("=== Pipeline start ===")
+
+    steps = [
+        ("S0 Разведка сабреддитов", lambda: s0_scout_subreddits.run()),
+        ("S1 Парсинг Reddit", lambda: s1_fetch_reddit.run()),
+        ("S2 Подготовка батчей", lambda: s2_prepare_batches.run()),
+        ("S3 Анализ болей (Claude Haiku)", lambda: s3_save_problems.run()),
+        ("S4 Кластеризация (Claude Haiku)", lambda: s4_cluster_problems.run()),
+        ("S5 Генерация идей (Claude Sonnet)", lambda: s5_generate_ideas.run()),
+    ]
+
     for name, fn in steps:
         logger.info(f"Starting {name}...")
         start = time.time()
@@ -29,59 +39,31 @@ def run_steps(steps, logger):
             fn()
         except Exception as e:
             logger.error(f"{name} failed: {e}")
-            raise
+            print(f"\n❌ {name} упал: {e}")
+            return
         elapsed = time.time() - start
         logger.info(f"{name} completed in {elapsed:.1f}s")
+        print(f"✓ {name} ({elapsed:.1f}s)")
         time.sleep(1)
 
+    logger.info("=== Pipeline complete ===")
+    print(f"\n{'=' * 50}")
+    print("Пайплайн завершён. Результаты:")
+    print("=" * 50)
 
-def run():
-    logger = setup_logger("pipeline")
-    init_db()
-    args = sys.argv[1:]
+    from workers.db import use_conn
+    with use_conn() as conn:
+        stats = {
+            "постов": conn.execute("SELECT COUNT(*) FROM raw_posts").fetchone()[0],
+            "болей": conn.execute("SELECT COUNT(*) FROM problems").fetchone()[0],
+            "кластеров": conn.execute("SELECT COUNT(*) FROM pain_clusters").fetchone()[0],
+            "идей": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0").fetchone()[0],
+        }
+    for k, v in stats.items():
+        print(f"  {k}: {v}")
 
-    if "--after-s2" in args:
-        # После того как Claude Code проанализировал батчи
-        logger.info("=== Pipeline: after Claude analysis (S3 → S4) ===")
-        run_steps([
-            ("S3 Сохранение болей", lambda: s3_save_problems.run()),
-            ("S4 Кластеризация (промпт)", lambda: s4_cluster_problems.run()),
-        ], logger)
-        print(f"\n{'=' * 50}")
-        print("Кластеры подготовлены. Claude Code:")
-        print(f'  "Прочитай data/cluster_prompt.json, выполни _prompt"')
-        print(f"\nПосле Claude Code:")
-        print(f"  python3 -m workers.run_pipeline --after-s4")
-
-    elif "--after-s4" in args:
-        # После того как Claude Code кластеризовал
-        logger.info("=== Pipeline: after clustering (S4 save → S5) ===")
-        run_steps([
-            ("S4 Сохранение кластеров", lambda: s4_cluster_problems.save_clusters()),
-            ("S5 Генерация идей (промпт)", lambda: s5_generate_ideas.run()),
-        ], logger)
-        print(f"\n{'=' * 50}")
-        print("Промпт для идей готов. Claude Code:")
-        print(f'  "Прочитай data/ideas_prompt.json, выполни _prompt"')
-        print(f"\nПосле Claude Code:")
-        print(f"  python3 -m workers.s5_generate_ideas --save")
-
-    else:
-        # Автоматическая часть: S0 → S1 → S2
-        logger.info("=== Pipeline: auto stages (S0 → S1 → S2) ===")
-        run_steps([
-            ("S0 Разведка сабреддитов", lambda: s0_scout_subreddits.run()),
-            ("S1 Парсинг Reddit", lambda: s1_fetch_reddit.run()),
-            ("S2 Подготовка батчей", lambda: s2_prepare_batches.run()),
-        ], logger)
-        print(f"\n{'=' * 50}")
-        print("Батчи готовы. Claude Code:")
-        print(f'  "Прочитай файлы в data/batches/, выполни _prompt,')
-        print(f'   сохрани результат в data/problems_raw.json"')
-        print(f"\nПосле Claude Code:")
-        print(f"  python3 -m workers.run_pipeline --after-s2")
-
-    logger.info("=== Stage complete ===")
+    print(f"\nСмотреть: sqlite3 data/miner.db \"SELECT title, score FROM ideas ORDER BY score DESC LIMIT 10;\"")
+    print(f"Или: http://localhost:3000 (если API и фронт запущены)")
 
 
 if __name__ == "__main__":

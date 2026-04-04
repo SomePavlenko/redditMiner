@@ -1,126 +1,85 @@
 """
-S4 — Кластеризация болей.
+S4 — Кластеризация болей через Claude API.
 
-Флоу:
-  1. Скрипт собирает все problems → готовит data/cluster_prompt.json
-  2. Claude Code кластеризует + даёт названия → сохраняет data/clusters_raw.json
-  3. python3 -m workers.s4_cluster_problems --save  → читает clusters_raw.json → БД
+Собирает все боли за 7 дней, отправляет в Claude Haiku для кластеризации,
+считает pain_score, сохраняет в таблицу pain_clusters.
 
-Формат data/clusters_raw.json (Claude Code создаёт):
-[
-  {
-    "cluster_name": "Короткое название кластера",
-    "summary": "Суть боли в 1-2 предложения",
-    "problem_ids": [1, 5, 12, 34],
-    "subreddits": ["jobs", "careerguidance"]
-  }
-]
-
-python3 -m workers.s4_cluster_problems           # подготовить промпт
-python3 -m workers.s4_cluster_problems --save     # сохранить результат Claude
+python3 -m workers.s4_cluster_problems
 """
 
 import json
 import math
-import os
-import sys
-from workers.helpers import load_config, setup_logger, ROOT
+from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response
 from workers.db import use_conn
 
-CLUSTER_PROMPT_FILE = os.path.join(ROOT, "data", "cluster_prompt.json")
-CLUSTERS_RAW_FILE = os.path.join(ROOT, "data", "clusters_raw.json")
 
-
-def prepare_prompt():
-    """Готовит данные для кластеризации через Claude Code."""
+def run():
     config = load_config()
+    load_env()
     logger = setup_logger("s4")
     topic = config["topic"]
 
     with use_conn() as conn:
         problems = conn.execute(
-            """SELECT id, problem, subreddit, upvotes, source_url
+            """SELECT id, problem, subreddit, upvotes
             FROM problems
             WHERE parsed_at >= datetime('now', '-7 days')
             ORDER BY upvotes DESC"""
         ).fetchall()
 
     if not problems:
+        logger.info("S4: no problems to cluster")
         print("Нет болей для кластеризации")
         return
 
     problems_list = [
-        {
-            "id": p["id"],
-            "problem": p["problem"],
-            "subreddit": p["subreddit"],
-            "upvotes": p["upvotes"],
-        }
+        {"id": p["id"], "problem": p["problem"], "subreddit": p["subreddit"], "upvotes": p["upvotes"]}
         for p in problems
     ]
 
-    prompt_data = {
-        "_prompt": f"""Ты аналитик пользовательских проблем. Тема: "{topic}"
+    prompt = f"""Ты аналитик пользовательских проблем. Тема: "{topic}"
 
 Ниже список болей пользователей Reddit ({len(problems_list)} штук).
-Многие из них описывают одну и ту же проблему разными словами.
+Многие описывают одну и ту же проблему разными словами.
 
 ЗАДАНИЕ:
 1. Сгруппируй похожие боли в кластеры (5-20 кластеров)
-2. Дай каждому кластеру короткое название (3-5 слов)
+2. Дай каждому короткое название (3-5 слов)
 3. Напиши summary — суть боли в 1-2 предложения
-4. Укажи ID проблем которые входят в кластер
-5. Укажи из каких сабреддитов проблемы
 
-Верни JSON и сохрани в data/clusters_raw.json:
-[
-  {{
-    "cluster_name": "Название кластера",
-    "summary": "Суть проблемы",
-    "problem_ids": [1, 5, 12],
-    "subreddits": ["jobs", "careerguidance"]
-  }}
-]
+Верни ТОЛЬКО JSON, без markdown:
+[{{
+  "cluster_name": "Название кластера",
+  "summary": "Суть проблемы",
+  "problem_ids": [1, 5, 12],
+  "subreddits": ["jobs", "careerguidance"]
+}}]
 
 ПРАВИЛА:
 - Одна проблема может быть только в одном кластере
-- Не создавай кластер "Прочее" — лучше мелкие конкретные кластеры
-- Названия должны быть конкретными: "ATS отклоняет резюме" а не "Проблемы с резюме"
-- Кластеры с 1 проблемой — ок, если боль уникальная и важная""",
-        "problems": problems_list,
-    }
+- Не создавай кластер "Прочее"
+- Названия конкретные: "ATS отклоняет резюме" а не "Проблемы с резюме"
 
-    with open(CLUSTER_PROMPT_FILE, "w", encoding="utf-8") as f:
-        json.dump(prompt_data, f, ensure_ascii=False, indent=2)
+Боли:
+{json.dumps(problems_list, ensure_ascii=False)}"""
 
-    logger.info(f"S4: prepared {len(problems_list)} problems for clustering")
-    print(f"Промпт готов: {CLUSTER_PROMPT_FILE} ({len(problems_list)} болей)")
-    print(f'\nОткрой Claude Code:')
-    print(f'  "Прочитай {CLUSTER_PROMPT_FILE}, выполни _prompt"')
+    logger.info(f"S4: sending {len(problems_list)} problems to Claude for clustering")
+    raw = claude_call("claude-haiku-4-5-20250901", prompt, config, logger)
 
-
-def save_clusters():
-    """Читает результат Claude Code и сохраняет кластеры в БД."""
-    config = load_config()
-    logger = setup_logger("s4")
-    topic = config["topic"]
-
-    if not os.path.exists(CLUSTERS_RAW_FILE):
-        print(f"Файл {CLUSTERS_RAW_FILE} не найден. Сначала запусти Claude Code.")
+    try:
+        clusters = parse_json_response(raw, logger)
+    except json.JSONDecodeError as e:
+        logger.error(f"S4: Claude returned invalid JSON: {e}")
         return
 
-    with open(CLUSTERS_RAW_FILE, encoding="utf-8") as f:
-        clusters = json.load(f)
-
+    # Сохраняем кластеры с метриками
     with use_conn() as conn:
-        # Очищаем старые кластеры по теме
         conn.execute("DELETE FROM pain_clusters WHERE topic=?", (topic,))
 
         for cluster in clusters:
             problem_ids = cluster.get("problem_ids", [])
             subreddits = cluster.get("subreddits", [])
 
-            # Считаем метрики из реальных данных
             frequency = len(problem_ids)
             subreddit_spread = len(set(subreddits))
 
@@ -134,8 +93,6 @@ def save_clusters():
                 total_upvotes = sum(r["upvotes"] for r in rows)
 
             avg_upvotes = total_upvotes / frequency if frequency > 0 else 0
-
-            # pain_score: frequency×2 + subreddit_spread×3 + log(total_upvotes+1)
             pain_score = (frequency * 2) + (subreddit_spread * 3) + math.log(total_upvotes + 1)
 
             cluster_id = conn.execute(
@@ -157,16 +114,15 @@ def save_clusters():
                 ),
             ).lastrowid
 
-            # Обновляем cluster_id в problems
             for pid in problem_ids:
                 conn.execute("UPDATE problems SET cluster_id=? WHERE id=?", (cluster_id, pid))
 
         conn.commit()
 
     logger.info(f"S4: saved {len(clusters)} clusters")
-    print(f"Сохранено: {len(clusters)} кластеров")
+    print(f"S4: сохранено {len(clusters)} кластеров")
 
-    # Показываем топ
+    # Топ кластеры
     with use_conn() as conn:
         top = conn.execute(
             "SELECT cluster_name, pain_score, frequency, subreddit_spread FROM pain_clusters WHERE topic=? ORDER BY pain_score DESC LIMIT 10",
@@ -175,15 +131,6 @@ def save_clusters():
     print("\nТоп кластеры:")
     for c in top:
         print(f"  [{c['pain_score']:.1f}] {c['cluster_name']} (×{c['frequency']}, {c['subreddit_spread']} сабов)")
-
-    os.rename(CLUSTERS_RAW_FILE, CLUSTERS_RAW_FILE + ".done")
-
-
-def run():
-    if "--save" in sys.argv:
-        save_clusters()
-    else:
-        prepare_prompt()
 
 
 if __name__ == "__main__":

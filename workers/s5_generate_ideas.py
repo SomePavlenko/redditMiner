@@ -1,37 +1,16 @@
 """
-S5 — Генерация и скоринг идей.
+S5 — Генерация идей через Claude Sonnet + скоринг + дедупликация.
 
-Флоу:
-  1. python3 -m workers.s5_generate_ideas           → готовит data/ideas_prompt.json
-  2. Claude Code читает, генерит идеи              → сохраняет data/ideas_raw.json
-  3. python3 -m workers.s5_generate_ideas --save    → скоринг + дедуп + INSERT в БД
+Берёт топ кластеры болей, отправляет в Claude Sonnet для генерации идей,
+считает финальный score по формуле, дедуплицирует, сохраняет в таблицу ideas.
 
-Формат data/ideas_raw.json (Claude Code создаёт):
-[
-  {
-    "title": "Название",
-    "description": "Описание",
-    "product_example": "Как выглядит MVP",
-    "solves_clusters": [1, 3, 7],
-    "feasibility": 7,
-    "uniqueness": 8,
-    "revenue_model": "подписка"
-  }
-]
-
-python3 -m workers.s5_generate_ideas              # подготовить промпт
-python3 -m workers.s5_generate_ideas --save       # финализировать + записать в БД
+python3 -m workers.s5_generate_ideas
 """
 
 import json
 import math
-import os
-import sys
-from workers.helpers import load_config, setup_logger, ROOT
+from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response
 from workers.db import use_conn
-
-IDEAS_PROMPT_FILE = os.path.join(ROOT, "data", "ideas_prompt.json")
-IDEAS_RAW_FILE = os.path.join(ROOT, "data", "ideas_raw.json")
 
 
 def is_duplicate(new_title, existing_titles, threshold):
@@ -48,11 +27,12 @@ def is_duplicate(new_title, existing_titles, threshold):
     return False
 
 
-def prepare_prompt():
-    """Готовит промпт для генерации идей через Claude Code."""
+def run():
     config = load_config()
+    load_env()
     logger = setup_logger("s5")
     topic = config["topic"]
+    dedup_threshold = config.get("idea_dedup_similarity_threshold", 0.6)
 
     with use_conn() as conn:
         clusters = conn.execute(
@@ -65,8 +45,12 @@ def prepare_prompt():
         ).fetchall()
 
     if not clusters:
-        print("Нет кластеров болей. Сначала запусти S4.")
+        logger.info("S5: no clusters found")
+        print("Нет кластеров. Сначала запусти S4.")
         return
+
+    clusters_dict = {c["id"]: dict(c) for c in clusters}
+    max_pain_score = max(c["pain_score"] for c in clusters) if clusters else 1
 
     clusters_for_prompt = []
     for c in clusters:
@@ -82,19 +66,15 @@ def prepare_prompt():
 
     existing_titles = [r["title"] for r in existing_ideas]
 
-    prompt_data = {
-        "_prompt": f"""Ты продуктовый аналитик. Ищешь возможности для быстрого MVP.
-Тема исследования: "{topic}"
+    prompt = f"""Ты продуктовый аналитик. Ищешь возможности для быстрого MVP.
+Тема: "{topic}"
 
 КОНТЕКСТ:
 Команда — 2 разработчика (фронтенд + бэкенд), оба могут оркестрировать.
 Цель — найти боль, сделать MVP за 2-4 недели, проверить спрос.
-Если стрельнёт — масштабировать. Если нет — следующая идея.
-Ресурсы для масштабирования есть.
+Если стрельнёт — масштабировать. Ресурсы для масштабирования есть.
 
 КЛАСТЕРЫ БОЛЕЙ (отсортированы по pain_score):
-(pain_score = частота упоминаний + охват сабреддитов + популярность)
-
 {json.dumps(clusters_for_prompt, ensure_ascii=False, indent=2)}
 
 ЗАДАНИЕ:
@@ -104,7 +84,7 @@ def prepare_prompt():
 {{
   "title": "Название (3-5 слов)",
   "description": "Какую боль решает и как. Почему люди будут платить. (2-3 предложения)",
-  "product_example": "Конкретно что строим: какой интерфейс, что делает, как выглядит MVP (2-3 предложения)",
+  "product_example": "Что строим: интерфейс, функции, как выглядит MVP (2-3 предложения)",
   "solves_clusters": [1, 3],
   "feasibility": 7,
   "uniqueness": 8,
@@ -113,72 +93,40 @@ def prepare_prompt():
 
 МЕТОДОЛОГИЯ ОЦЕНКИ:
 
-feasibility (1-10) — Насколько реально двум разработчикам собрать MVP за 2-4 недели:
-  10: Лендинг + простой бэкенд, можно за неделю
-  8-9: Стандартный веб-сервис, API + фронт, 2-3 недели
-  6-7: Нужны интеграции/данные/ML, 3-4 недели
-  4-5: Сложная инфраструктура, но возможно
-  1-3: Нужна команда 5+ человек или 3+ месяца
+feasibility (1-10) — реально ли 2 разработчикам собрать MVP за 2-4 недели:
+  10: Лендинг + API, можно за неделю
+  8-9: Веб-сервис, API + фронт, 2-3 недели
+  6-7: Нужны интеграции/данные, 3-4 недели
+  4-5: Сложная инфраструктура
+  1-3: Нужна команда 5+ или 3+ месяца
 
-uniqueness (1-10) — Есть ли аналоги и насколько идея свежая:
+uniqueness (1-10) — есть ли аналоги:
   10: Ничего подобного нет
-  8-9: Есть далёкие аналоги, но не решают именно эту боль
-  6-7: Есть конкуренты, но можно дифференцироваться
-  4-5: Много конкурентов, нужен уникальный угол
+  8-9: Далёкие аналоги, не решают эту боль
+  6-7: Есть конкуренты, можно дифференцироваться
+  4-5: Много конкурентов
   1-3: Рынок перенасыщен
 
 ПРАВИЛА:
 - НЕ генерируй "платформу для всего" — только конкретные узкие продукты
-- Каждая идея должна решать хотя бы 1 кластер с pain_score > медианы
-- Лучше 5 сильных идей чем 15 слабых
-- MVP должен быть реально строимым, не фантазией
+- Каждая идея решает хотя бы 1 кластер
+- Лучше 5 сильных чем 15 слабых
 
-СУЩЕСТВУЮЩИЕ ИДЕИ (не повторяй похожие):
+СУЩЕСТВУЮЩИЕ ИДЕИ (не повторяй):
 {json.dumps(existing_titles, ensure_ascii=False)}
 
-Сохрани результат как JSON массив в файл data/ideas_raw.json""",
-    }
+Верни ТОЛЬКО JSON массив, без markdown."""
 
-    with open(IDEAS_PROMPT_FILE, "w", encoding="utf-8") as f:
-        json.dump(prompt_data, f, ensure_ascii=False, indent=2)
+    logger.info(f"S5: sending {len(clusters)} clusters to Claude for idea generation")
+    raw = claude_call("claude-sonnet-4-6-20250514", prompt, config, logger)
 
-    logger.info(f"S5: prepared prompt with {len(clusters)} clusters")
-    print(f"Промпт готов: {IDEAS_PROMPT_FILE} ({len(clusters)} кластеров)")
-    print(f'\nОткрой Claude Code:')
-    print(f'  "Прочитай {IDEAS_PROMPT_FILE}, выполни _prompt"')
-
-
-def save_ideas():
-    """Читает ideas_raw.json, считает скоринг, дедуплицирует, пишет в БД."""
-    config = load_config()
-    logger = setup_logger("s5")
-    topic = config["topic"]
-    dedup_threshold = config.get("idea_dedup_similarity_threshold", 0.6)
-
-    if not os.path.exists(IDEAS_RAW_FILE):
-        print(f"Файл {IDEAS_RAW_FILE} не найден. Сначала запусти Claude Code.")
+    try:
+        ideas = parse_json_response(raw, logger)
+    except json.JSONDecodeError as e:
+        logger.error(f"S5: Claude returned invalid JSON: {e}")
         return
 
-    with open(IDEAS_RAW_FILE, encoding="utf-8") as f:
-        ideas = json.load(f)
-
-    # Загружаем кластеры для расчёта demand и breadth
-    with use_conn() as conn:
-        clusters = {
-            row["id"]: dict(row)
-            for row in conn.execute("SELECT * FROM pain_clusters WHERE topic=?", (topic,)).fetchall()
-        }
-        existing_titles = [
-            r["title"]
-            for r in conn.execute("SELECT title FROM ideas WHERE created_at >= datetime('now', '-30 days')").fetchall()
-        ]
-
-    if not clusters:
-        print("Нет кластеров в БД. Сначала S4 --save.")
-        return
-
-    max_pain_score = max(c["pain_score"] for c in clusters.values()) if clusters else 1
-
+    # Скоринг + дедупликация + запись в БД
     saved = 0
     duplicates = 0
 
@@ -187,11 +135,9 @@ def save_ideas():
             title = idea.get("title", "Untitled")
 
             # Дедупликация
-            if is_duplicate(title, existing_titles, dedup_threshold):
+            dup_flag = 1 if is_duplicate(title, existing_titles, dedup_threshold) else 0
+            if dup_flag:
                 duplicates += 1
-                dup_flag = 1
-            else:
-                dup_flag = 0
 
             # Скоринг
             solves = idea.get("solves_clusters", [])
@@ -199,29 +145,24 @@ def save_ideas():
             uniqueness = min(max(idea.get("uniqueness", 5), 1), 10)
 
             # demand_score: средний pain_score решаемых кластеров, нормализованный к 10
-            solved_pain_scores = [clusters[cid]["pain_score"] for cid in solves if cid in clusters]
-            if solved_pain_scores:
-                demand_score = (sum(solved_pain_scores) / len(solved_pain_scores)) / max_pain_score * 10
-            else:
-                demand_score = 0
+            solved_pain = [clusters_dict[cid]["pain_score"] for cid in solves if cid in clusters_dict]
+            demand_score = (sum(solved_pain) / len(solved_pain)) / max_pain_score * 10 if solved_pain else 0
 
-            # breadth_score: сколько кластеров покрывает, нормализованный к 10
-            breadth_score = min(len(solves) / max(len(clusters) * 0.3, 1) * 10, 10)
+            # breadth_score: сколько кластеров покрывает
+            breadth_score = min(len(solves) / max(len(clusters_dict) * 0.3, 1) * 10, 10)
 
-            # Финальный score: demand 35% + breadth 25% + feasibility 20% + uniqueness 20%
+            # Финальный score
             score = round(
                 demand_score * 0.35 + breadth_score * 0.25 + feasibility * 0.20 + uniqueness * 0.20,
                 2,
             )
 
-            # Собираем сабреддиты из кластеров
+            # Сабреддиты из кластеров
             all_subs = set()
-            all_urls = []
             for cid in solves:
-                if cid in clusters:
-                    c = clusters[cid]
+                if cid in clusters_dict:
                     try:
-                        all_subs.update(json.loads(c["subreddits_json"]))
+                        all_subs.update(json.loads(clusters_dict[cid]["subreddits_json"]))
                     except (json.JSONDecodeError, TypeError):
                         pass
 
@@ -232,16 +173,14 @@ def save_ideas():
                  solves_clusters, subreddits, is_duplicate)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    topic,
-                    title,
+                    topic, title,
                     idea.get("description", ""),
                     idea.get("product_example", ""),
                     idea.get("revenue_model", ""),
                     score,
                     round(demand_score, 2),
                     round(breadth_score, 2),
-                    feasibility,
-                    uniqueness,
+                    feasibility, uniqueness,
                     json.dumps(solves),
                     json.dumps(list(all_subs)),
                     dup_flag,
@@ -250,7 +189,6 @@ def save_ideas():
 
             if not dup_flag:
                 saved += 1
-                # Обновляем вес сабреддитов
                 for sub_name in all_subs:
                     conn.execute(
                         "UPDATE subreddits SET weight = weight + ?, total_ideas = total_ideas + 1 WHERE name=?",
@@ -262,27 +200,19 @@ def save_ideas():
         conn.commit()
 
     logger.info(f"S5: saved {saved} ideas, {duplicates} duplicates")
-    print(f"\nСохранено: {saved} идей, {duplicates} дубликатов пропущено")
+    print(f"\nS5: сохранено {saved} идей, {duplicates} дубликатов")
 
-    # Показываем топ
+    # Топ идеи
     with use_conn() as conn:
         top = conn.execute(
-            "SELECT title, score, demand_score, feasibility_score, uniqueness_score, revenue_model FROM ideas WHERE topic=? AND is_duplicate=0 ORDER BY score DESC LIMIT 10",
+            """SELECT title, score, demand_score, feasibility_score, uniqueness_score, revenue_model
+            FROM ideas WHERE topic=? AND is_duplicate=0 ORDER BY score DESC LIMIT 10""",
             (topic,),
         ).fetchall()
     print("\nТоп идеи:")
     for i in top:
         print(f"  [{i['score']:.1f}] {i['title']}")
         print(f"    demand={i['demand_score']:.1f} feasibility={i['feasibility_score']} uniqueness={i['uniqueness_score']} model={i['revenue_model']}")
-
-    os.rename(IDEAS_RAW_FILE, IDEAS_RAW_FILE + ".done")
-
-
-def run():
-    if "--save" in sys.argv:
-        save_ideas()
-    else:
-        prepare_prompt()
 
 
 if __name__ == "__main__":

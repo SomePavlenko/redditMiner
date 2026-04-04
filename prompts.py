@@ -136,6 +136,27 @@ Where we meet the user — be specific:
   YES: "on the job listing page on LinkedIn"
   YES: "the moment they receive a rejection email"
 
+reachability (1-10) — can we reach the user directly:
+  10: User is already on our platform (Chrome extension on the exact page)
+  8-9: Specific channel exists (r/jobs, LinkedIn search, ProductHunt)
+  6-7: Know the audience but no direct channel
+  4-5: Vague audience
+  1-3: "Everyone" or needs marketing budget
+
+willingness_to_pay (1-10) — will they actually pay:
+  10: Already paying competitors similar amounts
+  8-9: Pay for adjacent solutions (budget transfer)
+  6-7: Strong pain, fair price, but no habit of paying
+  4-5: Used to free tools, low conversion expected
+  1-3: Audience doesn't pay for software / students / broke segment
+
+retention_potential (1-10) — will they come back:
+  10: Daily use (like email client)
+  8-9: Weekly (like task tracker)
+  6-7: Monthly (like tax software)
+  4-5: Once per life event (like resume builder during job search)
+  1-3: One-time use, no reason to return
+
 feasibility (1-10) — can 2 devs build MVP in 2-4 weeks:
   10: Landing + API, 1 week
   8-9: Web app with API + frontend, 2-3 weeks
@@ -182,7 +203,17 @@ Return ONLY JSON, no markdown:
   "validation_step": "одно действие на 2 часа чтобы проверить спрос",
   "solves_clusters": [1, 3],
   "feasibility": 7,
-  "uniqueness": 8
+  "uniqueness": 8,
+  "reachability": 7,
+  "willingness_to_pay": 8,
+  "retention_potential": 6,
+  "feasibility_breakdown": {{
+    "tech_complexity": 8,
+    "data_availability": 9,
+    "third_party_deps": 7,
+    "legal_risk": 9,
+    "mvp_scope": "что в MVP, что потом"
+  }}
 }}]"""
 
 # ─────────────────────────────────────────────
@@ -233,13 +264,11 @@ ANALYSIS STRUCTURE:
 7. UPDATED SCORES (based on your deep analysis)
    Return a JSON block at the very end, after all text:
    %%SCORES_JSON%%
-   {{"feasibility": 6, "uniqueness": 7, "competition_level": "medium"}}
+   {{"feasibility": 6, "uniqueness": 7, "reachability": 8, "willingness_to_pay": 7, "retention_potential": 5, "competition_level": "medium"}}
    %%END_SCORES%%
 
    Be HONEST — if deep analysis revealed problems, LOWER the scores.
-   feasibility: same scale 1-10
-   uniqueness: same scale 1-10
-   competition_level: none | low | medium | high
+   All scores 1-10 scale. competition_level: none | low | medium | high
 
 ---
 

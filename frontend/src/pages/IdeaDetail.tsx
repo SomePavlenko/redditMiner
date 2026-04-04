@@ -16,6 +16,9 @@ interface Idea {
   breadth_score: number
   feasibility_score: number
   uniqueness_score: number
+  reachability: number
+  willingness_to_pay: number
+  retention_potential: number
   revenue_model: string
   solves_clusters: string
   subreddits: string
@@ -150,6 +153,9 @@ export default function IdeaDetail() {
           ...(data.feasibility_score != null ? { feasibility_score: data.feasibility_score } : {}),
           ...(data.uniqueness_score != null ? { uniqueness_score: data.uniqueness_score } : {}),
           ...(data.competition_level ? { competition_level: data.competition_level } : {}),
+          ...(data.reachability != null ? { reachability: data.reachability } : {}),
+          ...(data.willingness_to_pay != null ? { willingness_to_pay: data.willingness_to_pay } : {}),
+          ...(data.retention_potential != null ? { retention_potential: data.retention_potential } : {}),
         })
       }
     } catch { /* ignore */ }
@@ -310,9 +316,11 @@ export default function IdeaDetail() {
             </CardHeader>
             <CardContent className="px-5 pb-5 space-y-2">
               <ScoreBar label="Спрос" value={idea.demand_score} />
-              <ScoreBar label="Широта покрытия" value={idea.breadth_score} />
               <ScoreBar label="Реализуемость" value={idea.feasibility_score} />
+              <ScoreBar label="Достижимость" value={idea.reachability} />
+              <ScoreBar label="Готовность платить" value={idea.willingness_to_pay} />
               <ScoreBar label="Уникальность" value={idea.uniqueness_score} />
+              <ScoreBar label="Удержание" value={idea.retention_potential} />
 
               {fb && (
                 <>

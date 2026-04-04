@@ -126,6 +126,9 @@ def init_db():
         _migrate(conn, "ideas", "deep_analysis_done", "INTEGER DEFAULT 0")
         _migrate(conn, "ideas", "deep_analysis_result", "TEXT")
         _migrate(conn, "ideas", "feasibility_breakdown", "TEXT")
+        _migrate(conn, "ideas", "reachability", "REAL DEFAULT 0")
+        _migrate(conn, "ideas", "willingness_to_pay", "REAL DEFAULT 0")
+        _migrate(conn, "ideas", "retention_potential", "REAL DEFAULT 0")
 
         # Runs table
         conn.execute("""

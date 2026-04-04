@@ -14,6 +14,9 @@ interface Idea {
   breadth_score: number
   feasibility_score: number
   uniqueness_score: number
+  reachability: number
+  willingness_to_pay: number
+  retention_potential: number
   revenue_model: string
   solves_clusters: string
   subreddits: string
@@ -84,8 +87,13 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
     <Card id={`idea-${idea.id}`} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors gap-0 py-0">
       <CardHeader className="px-5 pt-5 pb-0">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <ScoreBadge score={idea.score} />
+            {idea.score <= 3 && (
+              <Badge variant="outline" className="bg-red-900/30 text-red-400 border-red-800 text-[10px]">
+                Заблокировано
+              </Badge>
+            )}
             <Link to={`/ideas/${idea.id}`} className="font-semibold text-white text-sm leading-snug hover:text-indigo-300 transition-colors">
               {idea.title}
             </Link>
@@ -135,11 +143,13 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
         )}
 
         {/* Score breakdown */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <MiniBar label="Спрос" value={idea.demand_score} />
-          <MiniBar label="Широта" value={idea.breadth_score} />
           <MiniBar label="Реализуем." value={idea.feasibility_score} />
+          <MiniBar label="Достижим." value={idea.reachability} />
+          <MiniBar label="Платят" value={idea.willingness_to_pay} />
           <MiniBar label="Уникальн." value={idea.uniqueness_score} />
+          <MiniBar label="Удержание" value={idea.retention_potential} />
         </div>
 
         {/* Link to detail page */}

@@ -12,6 +12,9 @@ interface Idea {
   breadth_score: number
   feasibility_score: number
   uniqueness_score: number
+  reachability: number
+  willingness_to_pay: number
+  retention_potential: number
   revenue_model: string
   solves_clusters: string
   subreddits: string

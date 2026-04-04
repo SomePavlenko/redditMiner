@@ -177,20 +177,45 @@ async def run_deep_analysis(idea_id: int):
 
         # Update scores if deep analysis provided them
         if updated_scores:
-            new_feasibility = min(max(updated_scores.get("feasibility", idea["feasibility_score"]), 1), 10)
-            new_uniqueness = min(max(updated_scores.get("uniqueness", idea["uniqueness_score"]), 1), 10)
+            new_feasibility = min(max(updated_scores.get("feasibility", idea["feasibility_score"] or 5), 1), 10)
+            new_uniqueness = min(max(updated_scores.get("uniqueness", idea["uniqueness_score"] or 5), 1), 10)
+            new_reachability = min(max(updated_scores.get("reachability", idea["reachability"] or 5), 1), 10)
+            new_willingness = min(max(updated_scores.get("willingness_to_pay", idea["willingness_to_pay"] or 5), 1), 10)
+            new_retention = min(max(updated_scores.get("retention_potential", idea["retention_potential"] or 5), 1), 10)
             new_competition = updated_scores.get("competition_level", idea["competition_level"])
 
-            # Recalculate total score with updated values
-            demand = idea["demand_score"] or 0
-            breadth = idea["breadth_score"] or 0
-            new_score = round(demand * 0.35 + breadth * 0.25 + new_feasibility * 0.20 + new_uniqueness * 0.20, 2)
+            # Recalculate score using scoring engine
+            from workers.s5_generate_ideas import compute_score
+            fake_idea = {
+                "uniqueness": new_uniqueness,
+                "reachability": new_reachability,
+                "willingness_to_pay": new_willingness,
+                "retention_potential": new_retention,
+                "feasibility": new_feasibility,
+                "feasibility_breakdown": json.loads(idea["feasibility_breakdown"]) if idea["feasibility_breakdown"] else {},
+                "solves_clusters": json.loads(idea["solves_clusters"]) if idea["solves_clusters"] else [],
+                "competition_level": new_competition,
+                "monetization_type": idea["monetization_type"] or "",
+            }
+
+            # Need clusters for demand calculation
+            current_topic = idea["topic"]
+            clusters_rows = conn.execute("SELECT * FROM pain_clusters WHERE topic=?", (current_topic,)).fetchall()
+            cd = {r["id"]: dict(r) for r in clusters_rows}
+            mp = max(r["pain_score"] for r in clusters_rows) if clusters_rows else 1
+
+            result_scores = compute_score(fake_idea, cd, mp, config)
+            new_score = result_scores["score"]
 
             conn.execute(
                 """UPDATE ideas SET
-                    feasibility_score=?, uniqueness_score=?, competition_level=?, score=?
+                    feasibility_score=?, uniqueness_score=?, competition_level=?,
+                    reachability=?, willingness_to_pay=?, retention_potential=?,
+                    score=?
                 WHERE id=?""",
-                (new_feasibility, new_uniqueness, new_competition, new_score, idea_id),
+                (new_feasibility, new_uniqueness, new_competition,
+                 new_reachability, new_willingness, new_retention,
+                 new_score, idea_id),
             )
 
         conn.commit()
@@ -207,6 +232,9 @@ async def run_deep_analysis(idea_id: int):
         "feasibility_score": dict(updated)["feasibility_score"] if updated else None,
         "uniqueness_score": dict(updated)["uniqueness_score"] if updated else None,
         "competition_level": dict(updated)["competition_level"] if updated else None,
+        "reachability": dict(updated)["reachability"] if updated else None,
+        "willingness_to_pay": dict(updated)["willingness_to_pay"] if updated else None,
+        "retention_potential": dict(updated)["retention_potential"] if updated else None,
     }
 
 

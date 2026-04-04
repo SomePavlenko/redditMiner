@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 interface Idea {
   id: number; title: string; description: string; product_example: string; score: number
   demand_score: number; breadth_score: number; feasibility_score: number; uniqueness_score: number
+  reachability: number; willingness_to_pay: number; retention_potential: number
   revenue_model: string; solves_clusters: string; subreddits: string; source_urls: string
   is_favourite: number; created_at: string; pain: string; solution: string
   where_we_meet_user: string; monetization: string; monetization_type: string

@@ -20,5 +20,20 @@
   "cron_parser": "0 2 * * *",
   "cron_analyzer": "0 3 * * *",
   "cron_digest": "0 4 * * *",
-  "cron_reparse_check": "0 5 * * *"
+  "cron_reparse_check": "0 5 * * *",
+  "scoring_weights": {
+    "demand": 0.30,
+    "feasibility": 0.25,
+    "reachability": 0.15,
+    "willingness_to_pay": 0.15,
+    "uniqueness": 0.10,
+    "retention": 0.05
+  },
+  "scoring_market_multipliers": {
+    "saas_subscription": 1.3,
+    "freemium": 1.1,
+    "b2b_license": 1.2,
+    "one_time": 0.8
+  },
+  "scoring_speed_bonus_threshold": 8
 }

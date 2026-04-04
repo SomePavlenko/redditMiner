@@ -93,8 +93,18 @@ def run():
                 duplicates += 1
 
             solves = idea.get("solves_clusters", [])
-            feasibility = min(max(idea.get("feasibility", 5), 1), 10)
             uniqueness = min(max(idea.get("uniqueness", 5), 1), 10)
+
+            # Feasibility: use breakdown if available, otherwise use flat score
+            fb = idea.get("feasibility_breakdown", {})
+            if fb and isinstance(fb, dict):
+                tech = min(max(fb.get("tech_complexity", 5), 1), 10)
+                data = min(max(fb.get("data_availability", 5), 1), 10)
+                deps = min(max(fb.get("third_party_deps", 5), 1), 10)
+                legal = min(max(fb.get("legal_risk", 5), 1), 10)
+                feasibility = round((tech + data + deps + legal) / 4, 1)
+            else:
+                feasibility = min(max(idea.get("feasibility", 5), 1), 10)
 
             solved_pain = [clusters_dict[cid]["pain_score"] for cid in solves if cid in clusters_dict]
             demand_score = (sum(solved_pain) / len(solved_pain)) / max_pain_score * 10 if solved_pain else 0
@@ -119,8 +129,8 @@ def run():
                  score, demand_score, breadth_score, feasibility_score, uniqueness_score,
                  solves_clusters, subreddits, is_duplicate,
                  pain, solution, where_we_meet_user, monetization, monetization_type,
-                 competition_level, competition_note, validation_step)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 competition_level, competition_note, validation_step, feasibility_breakdown)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     topic, title,
                     idea.get("description", ""),
@@ -138,6 +148,7 @@ def run():
                     idea.get("competition_level", ""),
                     idea.get("competition_note", ""),
                     idea.get("validation_step", ""),
+                    json.dumps(fb) if fb else None,
                 ),
             )
 

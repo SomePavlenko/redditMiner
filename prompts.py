@@ -92,7 +92,14 @@ For each idea return JSON (ALL text fields in Russian):
   "solves_clusters": [1, 3],
   "score": 8,
   "feasibility": 7,
-  "uniqueness": 8
+  "uniqueness": 8,
+  "feasibility_breakdown": {{
+    "tech_complexity": 8,
+    "data_availability": 9,
+    "third_party_deps": 7,
+    "legal_risk": 9,
+    "mvp_scope": "Что входит в MVP, что отложить на потом (1-2 предложения)"
+  }}
 }}
 
 SCORING GUIDE:
@@ -103,11 +110,41 @@ score (1-10) — overall potential:
   5-6: Interesting but risky
   1-4: Weak or unclear
 
-feasibility (1-10) — can 2 devs build MVP in 2-4 weeks:
-  10: Landing + API, 1 week
-  8-9: Web app, 2-3 weeks
-  6-7: Needs integrations, 3-4 weeks
-  1-5: Too complex for MVP
+feasibility (1-10) — COMPOSITE score based on these sub-factors:
+
+  tech_complexity (1-10) — technical difficulty for 2 fullstack devs + AI:
+    10: Static site, simple CRUD, basic API
+    8-9: Standard web app with auth, payments, simple ML/AI calls
+    6-7: Complex integrations, real-time features, custom ML models
+    4-5: Distributed systems, heavy data processing
+    1-3: Requires PhD-level research or years of data collection
+
+  data_availability (1-10) — is the data needed for the product accessible:
+    10: Public APIs, no data needed, user generates content
+    8-9: Freely available data, easy to scrape/aggregate
+    6-7: Paid APIs, partial data, needs enrichment
+    4-5: Hard to get data, partnerships required
+    1-3: Proprietary data, regulatory barriers
+
+  third_party_deps (1-10) — dependency on external services/platforms:
+    10: Self-contained, no external deps
+    8-9: Standard cloud services (AWS, Stripe, etc.)
+    6-7: Depends on specific platform APIs (LinkedIn, HH, etc.) that may break
+    4-5: Depends on unstable or rate-limited APIs
+    1-3: Requires platform approval, partnership, or enterprise contract
+
+  legal_risk (1-10) — legal/compliance concerns:
+    10: No legal issues
+    8-9: Standard terms of service compliance
+    6-7: Gray area (scraping, data privacy, user content)
+    4-5: Needs legal review, GDPR/privacy concerns
+    1-3: Potential lawsuits, regulatory approval needed
+
+  mvp_scope: what's IN the MVP vs what's deferred (in Russian)
+
+  Final feasibility = average of (tech_complexity + data_availability + third_party_deps + legal_risk) / 4
+  IMPORTANT: Be HONEST. If the idea needs scraping LinkedIn — third_party_deps is 4-5, not 8.
+  If it records private conversations — legal_risk is 3-4, not 8.
 
 uniqueness (1-10) — market position:
   10: Nothing exists

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 interface Idea {
@@ -74,28 +74,11 @@ function MiniBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function IdeaCard({ idea, onToggleFav }: Props) {
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState(idea.deep_analysis_result || '')
-  const [analysisDone, setAnalysisDone] = useState(!!idea.deep_analysis_done)
-
   const subs = useMemo(() => {
     try { return JSON.parse(idea.subreddits) as string[] } catch { return [] }
   }, [idea.subreddits])
 
   const comp = competitionConfig[idea.competition_level] || null
-
-  const runDeepAnalysis = async () => {
-    setAnalyzing(true)
-    try {
-      const resp = await fetch(`/api/ideas/${idea.id}/deep-analysis`, { method: 'POST' })
-      const data = await resp.json()
-      if (data.result) {
-        setAnalysisResult(data.result)
-        setAnalysisDone(true)
-      }
-    } catch { /* ignore */ }
-    setAnalyzing(false)
-  }
 
   return (
     <Card id={`idea-${idea.id}`} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors gap-0 py-0">
@@ -103,10 +86,12 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <ScoreBadge score={idea.score} />
-            <h3 className="font-semibold text-white text-sm leading-snug">{idea.title}</h3>
+            <Link to={`/ideas/${idea.id}`} className="font-semibold text-white text-sm leading-snug hover:text-indigo-300 transition-colors">
+              {idea.title}
+            </Link>
           </div>
           <button
-            onClick={() => onToggleFav(idea.id)}
+            onClick={(e) => { e.preventDefault(); onToggleFav(idea.id) }}
             className={cn('shrink-0 text-xl leading-none transition-colors',
               idea.is_favourite ? 'text-yellow-400' : 'text-gray-600 hover:text-yellow-400'
             )}
@@ -114,30 +99,18 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
         </div>
       </CardHeader>
 
-      <CardContent className="px-5 pt-3 pb-0 flex flex-col gap-3">
-        {/* Боль */}
+      <CardContent className="px-5 pt-3 pb-0 flex flex-col gap-2.5">
+        {/* Pain + Solution */}
         {idea.pain && (
           <div className="text-sm text-gray-300">
             <span className="font-medium text-gray-100">Боль: </span>{idea.pain}
           </div>
         )}
-
-        {/* Решение */}
         {idea.solution && (
-          <div className="text-sm text-gray-300">
-            <span className="font-medium text-gray-100">Решение: </span>{idea.solution}
-          </div>
+          <div className="text-sm text-gray-400">{idea.solution}</div>
         )}
 
-        {/* Где встречаем пользователя */}
-        {idea.where_we_meet_user && (
-          <div className="text-sm bg-indigo-950/30 border border-indigo-900/50 rounded-lg px-3 py-2">
-            <span className="font-medium text-indigo-300">Где встречаем: </span>
-            <span className="text-indigo-200">{idea.where_we_meet_user}</span>
-          </div>
-        )}
-
-        {/* Монетизация + конкуренция */}
+        {/* Badges row: monetization + competition */}
         <div className="flex gap-2 flex-wrap">
           {idea.monetization && (
             <Badge variant="outline" className="bg-gray-800/60 text-gray-300 border-gray-700 text-[11px] font-normal h-auto py-0.5">
@@ -149,27 +122,16 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
               {comp.label}
             </Badge>
           )}
+          {idea.deep_analysis_done ? (
+            <Badge variant="outline" className="bg-indigo-900/20 text-indigo-400 border-indigo-800 text-[11px] font-normal h-auto py-0.5">
+              Deep Analysis ✓
+            </Badge>
+          ) : null}
         </div>
 
-        {/* Заметка о конкуренции */}
-        {idea.competition_note && (
-          <p className="text-xs text-gray-500 italic">{idea.competition_note}</p>
-        )}
-
-        {/* Первый шаг валидации */}
-        {idea.validation_step && (
-          <div className="text-sm border-l-2 border-green-700 pl-3">
-            <span className="font-medium text-gray-100">Первый шаг: </span>
-            <span className="text-gray-300">{idea.validation_step}</span>
-          </div>
-        )}
-
-        {/* Fallback: старые поля если новых нет */}
+        {/* Fallback for old ideas */}
         {!idea.pain && idea.description && (
           <p className="text-gray-300 text-sm">{idea.description}</p>
-        )}
-        {!idea.pain && idea.product_example && (
-          <p className="text-gray-500 text-sm italic">→ {idea.product_example}</p>
         )}
 
         {/* Score breakdown */}
@@ -180,31 +142,12 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
           <MiniBar label="Уникальн." value={idea.uniqueness_score} />
         </div>
 
-        {/* Deep Analysis кнопка */}
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            'w-full text-xs',
-            analysisDone
-              ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-default'
-              : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700 hover:text-white'
-          )}
-          onClick={runDeepAnalysis}
-          disabled={analysisDone || analyzing}
-        >
-          {analyzing ? 'Анализирую...' : analysisDone ? '✓ Deep Analysis выполнен' : 'Deep Analysis'}
-        </Button>
-
-        {/* Результат Deep Analysis */}
-        {analysisResult && (
-          <div className="text-sm bg-gray-950 border border-gray-800 rounded-lg p-3 text-gray-300 whitespace-pre-wrap max-h-96 overflow-y-auto">
-            {analysisResult}
-          </div>
-        )}
+        {/* Link to detail page */}
+        <Link to={`/ideas/${idea.id}`} className="text-xs text-indigo-400 hover:text-indigo-300 text-center py-1">
+          Подробнее →
+        </Link>
       </CardContent>
 
-      {/* Subreddit tags */}
       {subs.length > 0 && (
         <CardFooter className="px-5 py-3 mt-1 border-t border-gray-800 bg-transparent flex-wrap gap-1.5">
           {subs.map(s => (

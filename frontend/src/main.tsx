@@ -5,6 +5,7 @@ import './index.css'
 import Daily from './pages/Daily'
 import Trends from './pages/Trends'
 import Ideas from './pages/Ideas'
+import IdeaDetail from './pages/IdeaDetail'
 
 function Layout() {
   const link = "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -26,6 +27,7 @@ function Layout() {
           <Route path="/" element={<Daily />} />
           <Route path="/trends" element={<Trends />} />
           <Route path="/ideas" element={<Ideas />} />
+          <Route path="/ideas/:id" element={<IdeaDetail />} />
         </Routes>
       </main>
     </div>

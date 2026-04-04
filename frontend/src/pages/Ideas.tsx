@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import IdeaCard from '../components/IdeaCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 
 interface Idea {
@@ -50,7 +48,7 @@ interface Cluster {
 export default function Ideas() {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [subs, setSubs] = useState<Sub[]>([])
-  const [clusters, setClusters] = useState<Cluster[]>([])
+  const [, setClusters] = useState<Cluster[]>([])
   const [filters, setFilters] = useState({
     subreddit: '',
     favourite: undefined as number | undefined,
@@ -90,14 +88,7 @@ export default function Ideas() {
     fetchIdeas()
   }
 
-  const queueSub = async (name: string) => {
-    await fetch(`/api/subreddits/${name}/queue`, { method: 'POST' })
-    const resp = await fetch('/api/subreddits')
-    setSubs(await resp.json())
-  }
-
   const maxWeight = Math.max(...subs.map(s => s.weight), 1)
-  const maxPainScore = Math.max(...clusters.map(c => c.pain_score), 1)
 
   return (
     <div className="flex gap-6 min-h-0">
@@ -198,49 +189,6 @@ export default function Ideas() {
 
       {/* ── Right panel 30% ── */}
       <div className="flex-[3] min-w-0 flex flex-col gap-4 max-w-xs">
-
-        {/* Pain clusters */}
-        <Card className="bg-gray-900 border-gray-800 gap-0 py-0">
-          <CardHeader className="px-4 pt-4 pb-3">
-            <CardTitle className="text-sm font-semibold text-white">
-              Кластеры болей
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 flex flex-col gap-3">
-            {clusters.length === 0 && (
-              <p className="text-xs text-gray-600">Нет данных</p>
-            )}
-            {clusters.map(cluster => (
-              <div key={cluster.cluster_name} className="flex flex-col gap-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-300 leading-snug flex-1 min-w-0 truncate">
-                    {cluster.cluster_name}
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge
-                      variant="outline"
-                      className="bg-gray-800/60 border-gray-700 text-gray-400 text-[10px] font-normal h-auto py-0 px-1.5"
-                    >
-                      {cluster.frequency}
-                    </Badge>
-                    <span className="text-[10px] font-semibold tabular-nums text-gray-400 w-6 text-right">
-                      {cluster.pain_score}
-                    </span>
-                  </div>
-                </div>
-                <div className="h-1 w-full rounded-full bg-gray-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-rose-500/70 transition-all"
-                    style={{ width: `${(cluster.pain_score / maxPainScore) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Separator className="bg-gray-800" />
-
         {/* Subreddits */}
         <Card className="bg-gray-900 border-gray-800 gap-0 py-0">
           <CardHeader className="px-4 pt-4 pb-3">
@@ -252,32 +200,10 @@ export default function Ideas() {
             {subs.map(sub => (
               <div key={sub.name} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-gray-200">
-                    r/{sub.name}
-                  </span>
-                  {sub.queue_reparse ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-orange-500/10 border-orange-700/50 text-orange-400 text-[10px] font-normal h-auto py-0 px-1.5"
-                    >
-                      В очереди
-                    </Badge>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => queueSub(sub.name)}
-                      className="text-gray-600 hover:text-gray-300 hover:bg-gray-800 text-[10px] h-5 px-1.5"
-                    >
-                      В очередь
-                    </Button>
-                  )}
+                  <span className="text-xs font-medium text-gray-200">r/{sub.name}</span>
                 </div>
                 <div className="h-1 w-full rounded-full bg-gray-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-all"
-                    style={{ width: `${(sub.weight / maxWeight) * 100}%` }}
-                  />
+                  <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(sub.weight / maxWeight) * 100}%` }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-gray-600">
                   <span>{sub.total_ideas} идей</span>
@@ -285,9 +211,7 @@ export default function Ideas() {
                 </div>
               </div>
             ))}
-            {subs.length === 0 && (
-              <p className="text-xs text-gray-600">Нет данных</p>
-            )}
+            {subs.length === 0 && <p className="text-xs text-gray-600">Нет данных</p>}
           </CardContent>
         </Card>
       </div>

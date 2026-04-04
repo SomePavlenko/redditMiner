@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -657,6 +658,30 @@ export default function BubbleChart({ ideas }: Props) {
     )
   }
 
+  // ─── Selected node detail card (snapshot data on selection, immune to hover re-renders) ───
+
+  interface CardConn { id: string; label: string; type: 'idea' | 'cluster' | 'subreddit'; sourceId?: number; clusterId?: number; subName?: string; score?: number; clusterName?: string; painScore?: number }
+  interface CardData { node: SimNode; ideas: CardConn[]; clusters: CardConn[]; subs: CardConn[] }
+
+  const cardData = useMemo<CardData | null>(() => {
+    if (!selectedNodeId) return null
+    const s = stateRef.current
+    const node = s.nodeMap.get(selectedNodeId)
+    if (!node) return null
+    const conns: CardConn[] = []
+    s.links.forEach(l => {
+      if (l.from === selectedNodeId) { const n = s.nodeMap.get(l.to); if (n) conns.push(n) }
+      if (l.to === selectedNodeId) { const n = s.nodeMap.get(l.from); if (n) conns.push(n) }
+    })
+    return {
+      node,
+      ideas: conns.filter(n => n.type === 'idea'),
+      clusters: conns.filter(n => n.type === 'cluster'),
+      subs: conns.filter(n => n.type === 'subreddit'),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId])
+
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -680,6 +705,94 @@ export default function BubbleChart({ ideas }: Props) {
           <TooltipContent node={tooltip.node} />
         </div>
       )}
+
+      {/* Selected node detail card */}
+      {cardData && (() => {
+        const { node, ideas: ic, clusters: cc, subs: sc } = cardData
+        const typeLabel = node.type === 'idea' ? 'Идея' : node.type === 'cluster' ? 'Кластер боли' : 'Сабреддит'
+        const typeColor = node.type === 'idea' ? 'text-indigo-400' : node.type === 'cluster' ? 'text-pink-400' : 'text-emerald-400'
+        const hasConns = ic.length + cc.length + sc.length > 0
+        return (
+          <div className="mt-3 rounded-xl border border-gray-800 bg-gray-900/80 p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: node.color, boxShadow: `0 0 8px ${node.color}` }} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-medium ${typeColor}`}>{typeLabel}</span>
+                  {node.score != null && <span className="text-xs text-gray-500">Score: {node.score}</span>}
+                  {node.painScore != null && <span className="text-xs text-gray-500">Pain: {node.painScore}</span>}
+                </div>
+                {node.type === 'idea' && node.sourceId != null ? (
+                  <Link to={`/ideas/${node.sourceId}`} className="text-sm font-semibold text-white hover:underline">{node.label}</Link>
+                ) : node.type === 'cluster' && node.clusterId != null ? (
+                  <Link to={`/clusters/${node.clusterId}`} className="text-sm font-semibold text-white hover:underline">{node.label}</Link>
+                ) : node.type === 'subreddit' && node.subName ? (
+                  <a href={`https://reddit.com/r/${node.subName}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-white hover:underline">{node.label}</a>
+                ) : (
+                  <span className="text-sm font-semibold text-white">{node.label}</span>
+                )}
+              </div>
+              <button onClick={() => setSelectedNodeId(null)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">&times;</button>
+            </div>
+            {hasConns ? (
+              <div className="flex flex-wrap gap-6 text-xs">
+                {ic.length > 0 && (
+                  <div>
+                    <div className="text-gray-500 mb-1.5 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ background: IDEA_COLOR }} />
+                      Идеи ({ic.length})
+                    </div>
+                    <ul className="space-y-1">
+                      {ic.map(n => (
+                        <li key={n.id}>
+                          <Link to={`/ideas/${n.sourceId}`} className="text-indigo-300 hover:text-indigo-200 hover:underline">
+                            {n.label}{n.score != null && <span className="text-gray-500 ml-1">({n.score})</span>}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {cc.length > 0 && (
+                  <div>
+                    <div className="text-gray-500 mb-1.5 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ background: CLUSTER_COLOR }} />
+                      Кластеры ({cc.length})
+                    </div>
+                    <ul className="space-y-1">
+                      {cc.map(n => (
+                        <li key={n.id}>
+                          <Link to={`/clusters/${n.clusterId}`} className="text-pink-300 hover:text-pink-200 hover:underline">
+                            {n.clusterName ?? n.label}{n.painScore != null && <span className="text-gray-500 ml-1">({n.painScore})</span>}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {sc.length > 0 && (
+                  <div>
+                    <div className="text-gray-500 mb-1.5 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ background: SUB_COLOR }} />
+                      Сабреддиты ({sc.length})
+                    </div>
+                    <ul className="space-y-1">
+                      {sc.map(n => (
+                        <li key={n.id}>
+                          <a href={`https://reddit.com/r/${n.subName}`} target="_blank" rel="noopener noreferrer"
+                             className="text-emerald-300 hover:text-emerald-200 hover:underline">{n.label}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-600">Нет связей</span>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Legend */}
       <div className="flex gap-5 mt-2 text-xs text-gray-500 justify-center">

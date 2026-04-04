@@ -8,6 +8,7 @@ import Ideas from './pages/Ideas'
 import Favourites from './pages/Favourites'
 import IdeaDetail from './pages/IdeaDetail'
 import ClusterDetail from './pages/ClusterDetail'
+import Problems from './pages/Problems'
 import Run from './pages/Run'
 
 function Layout() {
@@ -23,8 +24,9 @@ function Layout() {
           <NavLink to="/" end className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Daily</NavLink>
           <NavLink to="/trends" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Trends</NavLink>
           <NavLink to="/ideas" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Ideas</NavLink>
-          <NavLink to="/favourites" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>★</NavLink>
+          <NavLink to="/problems" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Problems</NavLink>
           <NavLink to="/run" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Run</NavLink>
+          <NavLink to="/favourites" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>★</NavLink>
         </div>
       </nav>
       <main className="p-6">
@@ -35,6 +37,7 @@ function Layout() {
           <Route path="/favourites" element={<Favourites />} />
           <Route path="/ideas/:id" element={<IdeaDetail />} />
           <Route path="/clusters/:id" element={<ClusterDetail />} />
+          <Route path="/problems" element={<Problems />} />
           <Route path="/run" element={<Run />} />
           <Route path="/run/:runId" element={<Run />} />
         </Routes>

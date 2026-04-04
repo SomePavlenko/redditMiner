@@ -91,10 +91,7 @@ export default function Daily() {
       {ideas.length === 0 ? (
         <p className="text-gray-500 text-center py-12">Нет идей за {date}</p>
       ) : view === 'bubbles' ? (
-        <BubbleChart ideas={ideas} onSelect={(id) => {
-          const el = document.getElementById(`idea-${id}`)
-          if (el) { setView('list'); setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 100) }
-        }} />
+        <BubbleChart ideas={ideas} onSelect={() => {}} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {ideas.map(idea => (

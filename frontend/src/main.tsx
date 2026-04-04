@@ -7,6 +7,7 @@ import Trends from './pages/Trends'
 import Ideas from './pages/Ideas'
 import Favourites from './pages/Favourites'
 import IdeaDetail from './pages/IdeaDetail'
+import ClusterDetail from './pages/ClusterDetail'
 
 function Layout() {
   const link = "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -31,6 +32,7 @@ function Layout() {
           <Route path="/ideas" element={<Ideas />} />
           <Route path="/favourites" element={<Favourites />} />
           <Route path="/ideas/:id" element={<IdeaDetail />} />
+          <Route path="/clusters/:id" element={<ClusterDetail />} />
         </Routes>
       </main>
     </div>

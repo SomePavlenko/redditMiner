@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -37,6 +38,7 @@ interface Cluster {
   pain_score: number
   frequency: number
   subreddit_spread: number
+  summary?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ export default function Trends() {
   const [topSubs, setTopSubs] = useState<Sub[]>([])
   const [topIdeas, setTopIdeas] = useState<Idea[]>([])
   const [topClusters, setTopClusters] = useState<Cluster[]>([])
+  const [expandedCluster, setExpandedCluster] = useState<number | null>(null)
 
   useEffect(() => {
     // Stats summary
@@ -219,26 +222,52 @@ export default function Trends() {
                 </thead>
                 <tbody>
                   {topClusters.map((c, i) => (
-                    <tr
-                      key={c.id ?? c.cluster_name}
-                      className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
-                    >
-                      <td className="py-3 pr-4 text-gray-600 font-mono text-xs">{i + 1}</td>
-                      <td className="py-3 pr-4 font-medium text-gray-200 max-w-[260px]">
-                        <span className="line-clamp-1">{c.cluster_name}</span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <PainScoreBar score={c.pain_score} />
-                      </td>
-                      <td className="py-3 pr-4 text-right font-mono text-gray-400">
-                        {c.frequency?.toLocaleString() ?? '—'}
-                      </td>
-                      <td className="py-3 text-right">
-                        <Badge variant="outline" className="font-mono text-xs border-gray-700 text-gray-400">
-                          {c.subreddit_spread ?? '—'}
-                        </Badge>
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={c.id ?? c.cluster_name}
+                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
+                        onClick={() => setExpandedCluster(expandedCluster === c.id ? null : c.id)}
+                      >
+                        <td className="py-3 pr-4 text-gray-600 font-mono text-xs">{i + 1}</td>
+                        <td className="py-3 pr-4 font-medium text-gray-200 max-w-[260px]">
+                          <Link
+                            to={`/clusters/${c.id}`}
+                            className="line-clamp-1 hover:text-indigo-400 transition-colors"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {c.cluster_name}
+                          </Link>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <PainScoreBar score={c.pain_score} />
+                        </td>
+                        <td className="py-3 pr-4 text-right font-mono text-gray-400">
+                          {c.frequency?.toLocaleString() ?? '—'}
+                        </td>
+                        <td className="py-3 text-right">
+                          <Badge variant="outline" className="font-mono text-xs border-gray-700 text-gray-400">
+                            {c.subreddit_spread ?? '—'}
+                          </Badge>
+                        </td>
+                      </tr>
+                      {expandedCluster === c.id && (
+                        <tr key={`${c.id}-expanded`} className="border-b border-gray-800/50">
+                          <td colSpan={5} className="px-4 pb-4 pt-2 bg-gray-800/20">
+                            {c.summary ? (
+                              <p className="text-sm text-gray-400 mb-3">{c.summary}</p>
+                            ) : (
+                              <p className="text-sm text-gray-600 italic mb-3">Нет описания</p>
+                            )}
+                            <Link
+                              to={`/clusters/${c.id}`}
+                              className="inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                            >
+                              Подробнее →
+                            </Link>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>
@@ -311,7 +340,7 @@ export default function Trends() {
                     return (
                       <tr
                         key={idea.id}
-                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
                       >
                         <td className="py-3 pr-4">
                           <span className="inline-flex items-center justify-center w-9 h-7 rounded-md bg-indigo-500/15 text-indigo-400 font-bold font-mono text-sm tabular-nums">
@@ -319,7 +348,12 @@ export default function Trends() {
                           </span>
                         </td>
                         <td className="py-3 pr-4 text-gray-200 max-w-[320px]">
-                          <span className="line-clamp-2 leading-snug">{idea.title}</span>
+                          <Link
+                            to={`/ideas/${idea.id}`}
+                            className="line-clamp-2 leading-snug hover:text-indigo-400 transition-colors"
+                          >
+                            {idea.title}
+                          </Link>
                         </td>
                         <td className="py-3 pr-4 hidden md:table-cell">
                           {idea.revenue_model ? (

@@ -83,10 +83,10 @@ def step2_fetch_posts():
             try:
                 conn.execute(
                     """INSERT OR IGNORE INTO raw_posts
-                    (reddit_id, subreddit, title, body, url, upvotes, parsed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (reddit_id, subreddit, topic, title, body, url, upvotes, parsed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        post["reddit_id"], TEST_SUB, post["title"],
+                        post["reddit_id"], TEST_SUB, config["topic"], post["title"],
                         post["body"], post["url"], post["upvotes"],
                         datetime.now(timezone.utc).isoformat(),
                     ),

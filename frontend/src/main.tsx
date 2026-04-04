@@ -8,6 +8,7 @@ import Ideas from './pages/Ideas'
 import Favourites from './pages/Favourites'
 import IdeaDetail from './pages/IdeaDetail'
 import ClusterDetail from './pages/ClusterDetail'
+import Run from './pages/Run'
 
 function Layout() {
   const link = "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -23,6 +24,7 @@ function Layout() {
           <NavLink to="/trends" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Trends</NavLink>
           <NavLink to="/ideas" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Ideas</NavLink>
           <NavLink to="/favourites" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>★</NavLink>
+          <NavLink to="/run" className={({ isActive }) => `${link} ${isActive ? active : inactive}`}>Run</NavLink>
         </div>
       </nav>
       <main className="p-6">
@@ -33,6 +35,7 @@ function Layout() {
           <Route path="/favourites" element={<Favourites />} />
           <Route path="/ideas/:id" element={<IdeaDetail />} />
           <Route path="/clusters/:id" element={<ClusterDetail />} />
+          <Route path="/run" element={<Run />} />
         </Routes>
       </main>
     </div>

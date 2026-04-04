@@ -136,6 +136,7 @@ async def run_deep_analysis(idea_id: int):
         where_we_meet_user=idea["where_we_meet_user"] or "",
         monetization=idea["monetization"] or "",
         competition_level=idea["competition_level"] or "",
+        competition_note=idea["competition_note"] or "",
     )
 
     try:
@@ -190,10 +191,13 @@ def get_clusters(topic: str = None):
 
 
 @app.get("/api/problems")
-def get_problems(cluster_id: int = None, subreddit: str = None, limit: int = 100):
+def get_problems(cluster_id: int = None, subreddit: str = None, topic: str = None, limit: int = 100):
     with use_conn() as conn:
         query = "SELECT * FROM problems WHERE 1=1"
         params = []
+        if topic:
+            query += " AND topic=?"
+            params.append(topic)
         if cluster_id is not None:
             query += " AND cluster_id=?"
             params.append(cluster_id)
@@ -215,9 +219,31 @@ def get_digests(limit: int = 30):
         return [dict(r) for r in rows]
 
 
-@app.get("/api/stats")
-def get_stats():
+@app.get("/api/topics")
+def get_topics():
+    """All topics that have data."""
     with use_conn() as conn:
+        rows = conn.execute(
+            """SELECT topic, COUNT(*) as ideas_count
+            FROM ideas WHERE is_duplicate=0 AND topic != ''
+            GROUP BY topic ORDER BY ideas_count DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/stats")
+def get_stats(topic: str = None):
+    with use_conn() as conn:
+        if topic:
+            return {
+                "topic": topic,
+                "total_ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (topic,)).fetchone()[0],
+                "total_posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (topic,)).fetchone()[0],
+                "total_problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (topic,)).fetchone()[0],
+                "total_clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (topic,)).fetchone()[0],
+                "total_subreddits": conn.execute("SELECT COUNT(*) FROM subreddits WHERE active=1 AND topic=?", (topic,)).fetchone()[0],
+                "last_run_at": conn.execute("SELECT MAX(created_at) FROM ideas WHERE topic=?", (topic,)).fetchone()[0],
+            }
         return {
             "total_ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0").fetchone()[0],
             "total_posts": conn.execute("SELECT COUNT(*) FROM raw_posts").fetchone()[0],
@@ -258,3 +284,95 @@ def run_worker(worker: str):
         cwd=ROOT,
     )
     return {"worker": worker, "status": "started"}
+
+
+# ── SSE pipeline run with live logs ──────────────────────────────────────────
+
+from fastapi.responses import StreamingResponse
+import asyncio
+import io
+
+STAGES = [
+    ("S0", "Разведка сабреддитов", "workers.s0_scout_subreddits"),
+    ("S1", "Парсинг Reddit", "workers.s1_fetch_reddit"),
+    ("S2", "Подготовка батчей", "workers.s2_prepare_batches"),
+    ("S3", "Анализ болей (Claude Haiku)", "workers.s3_save_problems"),
+    ("S4", "Кластеризация (Claude Haiku)", "workers.s4_cluster_problems"),
+    ("S5", "Генерация идей (Claude)", "workers.s5_generate_ideas"),
+]
+
+
+@app.get("/api/run/stream")
+async def run_pipeline_stream(topic: str = None):
+    """Runs the full pipeline and streams logs as SSE events."""
+
+    async def generate():
+        import time
+
+        # If topic override provided, temporarily update config
+        if topic:
+            cfg = load_config()
+            old_topic = cfg.get("topic")
+            cfg["topic"] = topic
+            save_config(cfg)
+            yield f"data: {json.dumps({'type': 'log', 'text': f'Тема: {topic}'})}\n\n"
+
+        for stage_id, stage_name, module in STAGES:
+            yield f"data: {json.dumps({'type': 'stage_start', 'stage': stage_id, 'name': stage_name})}\n\n"
+
+            start = time.time()
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", module,
+                cwd=ROOT,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+
+            async for line in proc.stdout:
+                text = line.decode("utf-8", errors="replace").rstrip()
+                if text:
+                    yield f"data: {json.dumps({'type': 'log', 'stage': stage_id, 'text': text})}\n\n"
+
+            await proc.wait()
+            elapsed = round(time.time() - start, 1)
+
+            if proc.returncode != 0:
+                yield f"data: {json.dumps({'type': 'stage_error', 'stage': stage_id, 'elapsed': elapsed})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': False, 'failed_stage': stage_id})}\n\n"
+                return
+            else:
+                yield f"data: {json.dumps({'type': 'stage_done', 'stage': stage_id, 'elapsed': elapsed})}\n\n"
+
+        # Collect summary
+        current_topic = load_config().get("topic", "")
+        with use_conn() as conn:
+            summary = {
+                "type": "done",
+                "success": True,
+                "topic": current_topic,
+                "stats": {
+                    "posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (current_topic,)).fetchone()[0],
+                    "problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (current_topic,)).fetchone()[0],
+                    "clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (current_topic,)).fetchone()[0],
+                    "ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (current_topic,)).fetchone()[0],
+                },
+                "top_ideas": [
+                    dict(r) for r in conn.execute(
+                        """SELECT id, title, score, pain, competition_level, monetization, validation_step
+                        FROM ideas WHERE topic=? AND is_duplicate=0
+                        ORDER BY score DESC LIMIT 5""",
+                        (current_topic,),
+                    ).fetchall()
+                ],
+                "top_clusters": [
+                    dict(r) for r in conn.execute(
+                        """SELECT id, cluster_name, pain_score, frequency, summary
+                        FROM pain_clusters WHERE topic=?
+                        ORDER BY pain_score DESC LIMIT 5""",
+                        (current_topic,),
+                    ).fetchall()
+                ],
+            }
+        yield f"data: {json.dumps(summary, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

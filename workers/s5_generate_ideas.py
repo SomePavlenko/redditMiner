@@ -41,7 +41,8 @@ def run():
         ).fetchall()
 
         existing_ideas = conn.execute(
-            "SELECT title FROM ideas WHERE created_at >= datetime('now', '-30 days')"
+            "SELECT title FROM ideas WHERE topic=? AND created_at >= datetime('now', '-30 days')",
+            (topic,),
         ).fetchall()
 
     if not clusters:

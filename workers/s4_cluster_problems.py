@@ -24,8 +24,10 @@ def run():
         problems = conn.execute(
             """SELECT id, problem, subreddit, upvotes
             FROM problems
-            WHERE parsed_at >= datetime('now', '-7 days')
-            ORDER BY upvotes DESC"""
+            WHERE (topic=? OR topic='')
+            AND parsed_at >= datetime('now', '-7 days')
+            ORDER BY upvotes DESC""",
+            (topic,),
         ).fetchall()
 
     if not problems:

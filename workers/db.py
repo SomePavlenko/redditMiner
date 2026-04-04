@@ -106,7 +106,9 @@ def init_db():
         """)
 
         # Migrations — idempotent column additions
+        _migrate(conn, "raw_posts", "topic", "TEXT DEFAULT ''")
         _migrate(conn, "raw_posts", "comments_fetched", "INTEGER DEFAULT 0")
+        _migrate(conn, "problems", "topic", "TEXT DEFAULT ''")
         _migrate(conn, "problems", "cluster_id", "INTEGER DEFAULT NULL")
         _migrate(conn, "ideas", "demand_score", "REAL DEFAULT 0")
         _migrate(conn, "ideas", "breadth_score", "REAL DEFAULT 0")

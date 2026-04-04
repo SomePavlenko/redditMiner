@@ -25,7 +25,10 @@ def analyze_batch(batch_file, config, logger):
     if not posts:
         return []
 
-    prompt = S3_ANALYZE_PAINS.format(posts_json=json.dumps(posts, ensure_ascii=False))
+    prompt = S3_ANALYZE_PAINS.format(
+        topic=config["topic"],
+        posts_json=json.dumps(posts, ensure_ascii=False),
+    )
     raw = claude_call(config["claude_model_fast"], prompt, config, logger)
     return parse_json_response(raw, logger)
 
@@ -34,6 +37,7 @@ def run():
     config = load_config()
     load_env()
     logger = setup_logger("s3")
+    topic = config["topic"]
 
     batch_files = sorted(BATCHES_DIR.glob("batch_*.json"))
     if not batch_files:
@@ -57,22 +61,23 @@ def run():
         with use_conn() as conn:
             for item in results:
                 post_id = item.get("post_db_id")
-                subreddit = item.get("subreddit", "")
-                url = item.get("url", "")
-
                 if not post_id:
                     continue
 
-                row = conn.execute("SELECT upvotes FROM raw_posts WHERE id=?", (post_id,)).fetchone()
-                upvotes = row["upvotes"] if row else 0
+                row = conn.execute("SELECT upvotes, subreddit, url FROM raw_posts WHERE id=?", (post_id,)).fetchone()
+                if not row:
+                    continue
+                upvotes = row["upvotes"]
+                subreddit = item.get("subreddit", row["subreddit"])
+                url = item.get("url", row["url"] or "")
 
                 for problem_text in item.get("problems", []):
                     if not problem_text or len(problem_text.strip()) < 5:
                         continue
                     conn.execute(
-                        """INSERT INTO problems (raw_post_id, subreddit, problem, upvotes, source_url)
-                        VALUES (?, ?, ?, ?, ?)""",
-                        (post_id, subreddit, problem_text.strip(), upvotes, url),
+                        """INSERT INTO problems (raw_post_id, subreddit, topic, problem, upvotes, source_url)
+                        VALUES (?, ?, ?, ?, ?, ?)""",
+                        (post_id, subreddit, topic, problem_text.strip(), upvotes, url),
                     )
                     total_problems += 1
 

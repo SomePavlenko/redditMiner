@@ -1,210 +1,232 @@
 """
 Все промпты для Claude API в одном месте.
 
-Переменные в фигурных скобках подставляются через .format() в воркерах.
+Переменные в {фигурных скобках} подставляются через .format() в воркерах.
+Двойные скобки {{}} — экранированные литералы для JSON-примеров.
 """
 
+# ─────────────────────────────────────────────
 # S0 — Поиск сабреддитов
-S0_FIND_SUBREDDITS = """Find 15-20 subreddits on Reddit where people discuss problems related to: "{topic}"
+# ─────────────────────────────────────────────
+S0_FIND_SUBREDDITS = """Ты ищешь сабреддиты где люди жалуются на реальные проблемы
+связанные с темой: "{topic}"
 
-I need subreddits where users COMPLAIN, ask for help, discuss what doesn't work.
-Not news or entertainment subreddits.
+Тебе нужны сабреддиты где:
+- люди делятся болями и frustration
+- обсуждают инструменты и их недостатки
+- ищут решения и рекомендации
+- есть живые дискуссии (не просто новости)
 
-Return ONLY a JSON array, no markdown:
-[{{"name": "subredditname", "relevance_score": 9}}]
-Sort by relevance_score DESC. Use real subreddit names without r/ prefix."""
+НЕ нужны: новостные сабреддиты, мемы, общий треп без проблем.
 
-# S3 — Анализ болей из постов
-S3_ANALYZE_PAINS = """You analyze Reddit posts to find user pain points that can be solved with software.
+Верни ТОЛЬКО JSON, без markdown:
+[{{"name": "название без r/", "why": "одна строка почему там есть боли по теме", "relevance_score": 8}}]
 
-For each post, extract ONLY specific pains:
-- What doesn't work, what frustrates, what people want improved
-- Focus on pains solvable by a SaaS tool, web service, API, browser extension, or bot
-- Ignore: vague complaints, political opinions, emotional venting without actionable problem
+Отсортируй по relevance_score DESC.
+Максимум 20 сабреддитов."""
 
-Posts:
+# ─────────────────────────────────────────────
+# S3 — Извлечение болей из постов
+# ─────────────────────────────────────────────
+S3_ANALYZE_PAINS = """Ты извлекаешь боли пользователей из постов Reddit.
+
+Тема исследования: {topic}
+
+ПРАВИЛА:
+Хорошая боль — конкретная, с деталью:
+  + "трачу 3 часа в неделю на ручное обновление таблиц"
+  + "ATS системы отклоняют моё резюме до живого человека"
+  + "не могу понять почему меня игнорируют после первого интервью"
+
+Плохая боль — абстрактная, без зацепки:
+  - "всё сложно"
+  - "никто не отвечает"
+  - "рынок труда ужасен"
+
+ВАЖНО:
+- Извлекай боль только из текста поста и комментариев
+- Не додумывай то чего нет в тексте
+- Если боли нет — верни пустой массив problems, не выдумывай
+- Один пост может дать 0, 1 или несколько болей
+
+Посты для анализа:
 {posts_json}
 
-Return ONLY JSON array, no markdown:
-[{{"post_db_id": 123, "subreddit": "jobs", "problems": ["pain 1", "pain 2"], "url": "https://..."}}]
-Empty problems array if no software-solvable pains found."""
+Верни ТОЛЬКО JSON без markdown:
+[{{"post_db_id": 123, "problems": ["конкретная боль первая", "конкретная боль вторая"]}}]"""
 
+# ─────────────────────────────────────────────
 # S4 — Кластеризация болей
-S4_CLUSTER_PROBLEMS = """You are a user pain analyst. Topic: "{topic}"
+# ─────────────────────────────────────────────
+S4_CLUSTER_PROBLEMS = """Ты аналитик пользовательских болей. Тема: "{topic}"
 
-Below are {problems_count} user pain points from Reddit.
-Many describe the same problem in different words.
+Ниже {problems_count} болей пользователей из Reddit.
+Многие описывают одну и ту же проблему разными словами.
 
-TASK:
-1. Group similar pains into clusters (5-20 clusters)
-2. Give each a short name (3-5 words, in Russian)
-3. Write summary — essence of the pain in 1-2 sentences (in Russian)
-4. Focus on pains that could be solved with software/SaaS
+ЗАДАЧА:
+1. Сгруппируй похожие боли в кластеры (5-20 кластеров)
+2. Дай каждому короткое название (3-5 слов, по-русски)
+3. Напиши summary — суть боли в 1-2 предложениях (по-русски)
+4. Фокус на болях которые можно решить софтом/SaaS
 
-Return ONLY JSON array, no markdown:
+Верни ТОЛЬКО JSON без markdown:
 [{{"cluster_name": "Название кластера", "summary": "Суть проблемы", "problem_ids": [1, 5, 12]}}]
 
-RULES:
-- One problem can only be in one cluster
-- No "Other" or "Miscellaneous" clusters
-- Names must be specific: "ATS rejects resumes" not "Resume problems"
-- cluster_name and summary MUST be in Russian
+ПРАВИЛА:
+- Одна боль может быть только в одном кластере
+- Никаких кластеров "Другое" или "Разное"
+- Названия должны быть конкретными: "ATS отклоняет резюме" а не "Проблемы с резюме"
+- cluster_name и summary ОБЯЗАТЕЛЬНО на русском
 
-Pains:
+Боли:
 {problems_json}"""
 
-# S5 — Генерация SaaS-идей (с расширенной оценкой)
-S5_GENERATE_IDEAS = """You are an expert at finding business ideas and product-market fit.
-Topic: "{topic}"
+# ─────────────────────────────────────────────
+# S5 — Генерация идей
+# ─────────────────────────────────────────────
+S5_GENERATE_IDEAS = """Ты product researcher. Твоя задача — найти бизнес-идеи
+которые решают реальные боли и на которых можно зарабатывать.
 
-CONTEXT:
-- Team: 2 developers (frontend + backend), both can orchestrate with AI
-- Goal: find pain → build MVP in 2-4 weeks → validate demand → scale if works
-- ONLY software products: SaaS, web service, API, browser extension, bot, CLI tool
-- Target: Russia first, then international
-- Must work WITHOUT network effects — product sells itself
+Тема: {topic}
 
-CRITERIA FOR A GOOD IDEA:
-- Moderate competition = GOOD (demand is proven)
-- Zero competition = BAD (no market exists)
-- Must have an obvious place where we meet the user
-- Monetization must be specific, not abstract
+КОНТЕКСТ:
+- Команда: 2 разработчика (frontend + backend), оба умеют оркестрировать AI
+- Цель: найти боль → MVP за 2-4 недели → проверить спрос → масштабировать
+- ТОЛЬКО софт: SaaS, веб-сервис, API, расширение браузера, бот, CLI
+- Монетизация: подписка, разовая покупка, freemium — НЕ маркетплейс, НЕ модель завязанная на людях
+- Должно работать БЕЗ сетевых эффектов — продукт продаёт себя сам
 
-PAIN CLUSTERS (sorted by pain_score):
+КЛАСТЕРЫ БОЛЕЙ (отсортированы по pain_score):
 {clusters_json}
 
-TASK:
-Find SaaS product ideas that solve these pains.
-Be strict: better 3 strong ideas than 10 weak ones.
-Minimum 3, maximum — as many as genuinely strong.
+---
 
-For each idea return JSON (ALL text fields in Russian):
-{{
-  "title": "Конкретное название продукта",
-  "pain": "Одно предложение: какая боль и где возникает",
-  "solution": "Что делает продукт, в одном предложении",
-  "where_we_meet_user": "Конкретное место/момент где пользователь страдает. Например: страница вакансии на LinkedIn, письмо от клиента в Gmail",
-  "monetization": "Конкретная модель с цифрами: freemium $0/$9/$29 мес, или $49 разово, или $199/мес b2b",
-  "monetization_type": "saas_subscription | one_time | freemium | b2b_license",
-  "competition_level": "none | low | medium | high",
-  "competition_note": "Кто конкуренты и почему наш вариант лучше",
-  "validation_step": "Конкретный первый шаг валидации за 48 часов",
-  "solves_clusters": [1, 3],
-  "score": 8,
-  "feasibility": 7,
-  "uniqueness": 8,
-  "feasibility_breakdown": {{
-    "tech_complexity": 8,
-    "data_availability": 9,
-    "third_party_deps": 7,
-    "legal_risk": 9,
-    "mvp_scope": "Что входит в MVP, что отложить на потом (1-2 предложения)"
-  }}
-}}
+ПЕРЕД ТЕМ КАК ПРЕДЛОЖИТЬ ИДЕЮ — убей её:
 
-SCORING GUIDE:
+1. Кто конкретно заплатит и почему прямо сейчас, а не через год?
+2. Почему это ещё не решили 10 стартапов с деньгами?
+3. Можно ли закрыть эту боль бесплатным ChatGPT промптом?
 
-score (1-10) — overall potential:
-  9-10: Clear pain, proven demand, easy MVP, obvious monetization
-  7-8: Strong idea, some unknowns
-  5-6: Interesting but risky
-  1-4: Weak or unclear
+Если идея выживает после этих вопросов — она сильная.
 
-feasibility (1-10) — COMPOSITE score based on these sub-factors:
+---
 
-  tech_complexity (1-10) — technical difficulty for 2 fullstack devs + AI:
-    10: Static site, simple CRUD, basic API
-    8-9: Standard web app with auth, payments, simple ML/AI calls
-    6-7: Complex integrations, real-time features, custom ML models
-    4-5: Distributed systems, heavy data processing
-    1-3: Requires PhD-level research or years of data collection
+КРИТЕРИИ:
 
-  data_availability (1-10) — is the data needed for the product accessible:
-    10: Public APIs, no data needed, user generates content
-    8-9: Freely available data, easy to scrape/aggregate
-    6-7: Paid APIs, partial data, needs enrichment
-    4-5: Hard to get data, partnerships required
-    1-3: Proprietary data, regulatory barriers
+Конкуренция:
+  medium = ХОРОШО (спрос доказан, люди платят)
+  none = ПЛОХО (рынка нет или боль не настоящая)
+  high = сложно, нужно очень чёткое преимущество
 
-  third_party_deps (1-10) — dependency on external services/platforms:
-    10: Self-contained, no external deps
-    8-9: Standard cloud services (AWS, Stripe, etc.)
-    6-7: Depends on specific platform APIs (LinkedIn, HH, etc.) that may break
-    4-5: Depends on unstable or rate-limited APIs
-    1-3: Requires platform approval, partnership, or enterprise contract
+Монетизация — только с цифрами:
+  НЕТ: "подписка"
+  ДА: "freemium: 5 использований бесплатно, $9/мес безлимит"
 
-  legal_risk (1-10) — legal/compliance concerns:
-    10: No legal issues
-    8-9: Standard terms of service compliance
-    6-7: Gray area (scraping, data privacy, user content)
-    4-5: Needs legal review, GDPR/privacy concerns
-    1-3: Potential lawsuits, regulatory approval needed
+Место встречи с пользователем — конкретное:
+  НЕТ: "в процессе работы"
+  ДА: "прямо на странице вакансии в LinkedIn"
+  ДА: "в момент когда получил rejection email"
 
-  mvp_scope: what's IN the MVP vs what's deferred (in Russian)
+feasibility (1-10) — могут ли 2 разработчика собрать MVP за 2-4 недели:
+  10: Лендинг + API, 1 неделя
+  8-9: Веб-приложение с API + фронтом, 2-3 недели
+  6-7: Нужны интеграции/данные/ML, 3-4 недели
+  4-5: Сложная инфраструктура
+  1-3: Нужно 5+ человек или 3+ месяца
 
-  Final feasibility = average of (tech_complexity + data_availability + third_party_deps + legal_risk) / 4
-  IMPORTANT: Be HONEST. If the idea needs scraping LinkedIn — third_party_deps is 4-5, not 8.
-  If it records private conversations — legal_risk is 3-4, not 8.
+uniqueness (1-10) — существующие альтернативы:
+  10: Ничего подобного нет
+  8-9: Далёкие аналоги
+  6-7: Конкуренты есть но можно отстроиться
+  4-5: Много конкурентов
+  1-3: Перенасыщенный рынок
 
-uniqueness (1-10) — market position:
-  10: Nothing exists
-  8-9: Distant analogues
-  6-7: Competitors but room to differentiate
-  4-5: Many competitors
-  1-3: Saturated
+---
 
-HARD RULES:
-- ONLY SaaS/tools — NO marketplaces, funds, insurance, communities
-- NO ideas requiring manual human work to function
-- Each idea must solve at least 1 cluster
-- ALL text fields MUST be in Russian
-- competition_level "medium" is BETTER than "none" (proven demand)
-
-EXISTING IDEAS (don't repeat):
+Уже найденные идеи за последние 30 дней (не повторять):
 {existing_titles}
 
-Return ONLY JSON array, no markdown."""
+---
 
-# Deep Analysis — глубокий анализ одной идеи
-DEEP_ANALYSIS = """You are a startup analyst doing deep due diligence on a product idea.
+СКОЛЬКО ИДЕЙ:
+- Минимум 3, максимум 10
+- Лучше 4 честных чем 8 натянутых
+- Если идея слабая — не включай
 
-IDEA:
-Title: {title}
-Pain: {pain}
-Solution: {solution}
-Where we meet user: {where_we_meet_user}
-Monetization: {monetization}
-Competition level: {competition_level}
+---
 
-TASK — answer in Russian, be specific and honest:
+Верни ТОЛЬКО JSON без markdown:
+[{{
+  "title": "конкретное название продукта",
+  "pain": "одно предложение: какая боль и где она возникает",
+  "solution": "одно предложение: что делает продукт",
+  "description": "2-3 предложения подробнее, по-русски",
+  "product_example": "конкретный MVP: что за UI, что делает, ключевая фича (2-3 предложения, по-русски)",
+  "where_we_meet_user": "конкретный момент и место где встречаем пользователя с этой болью",
+  "monetization": "конкретная модель с цифрами",
+  "monetization_type": "saas_subscription | one_time | freemium | b2b_license",
+  "revenue_model": "subscription",
+  "competition_level": "none | low | medium | high",
+  "competition_note": "кто конкуренты и в чём наше преимущество",
+  "validation_step": "одно действие на 2 часа чтобы проверить спрос: какой пост, на каком сабреддите, с каким вопросом",
+  "solves_clusters": [1, 3],
+  "feasibility": 7,
+  "uniqueness": 8
+}}]"""
 
-1. КОНКУРЕНТЫ
-   - Кто уже делает похожее? (названия, ссылки если знаешь)
-   - Сколько стоят их решения?
-   - Их слабые места?
+# ─────────────────────────────────────────────
+# Deep Analysis — глубокий разбор одной идеи
+# ─────────────────────────────────────────────
+DEEP_ANALYSIS = """Ты адвокат дьявола и стратег одновременно.
 
-2. РЫНОК
-   - TAM/SAM грубая оценка
-   - Кто платит: B2C или B2B?
-   - Средний чек и LTV
+Разбери эту бизнес-идею честно и жёстко:
 
-3. ПЕРВЫЕ 10 ПОЛЬЗОВАТЕЛЕЙ
-   - Где их искать конкретно?
-   - Какой канал привлечения самый дешёвый?
-   - Как превратить в платящих?
+Идея: {title}
+Боль: {pain}
+Решение: {solution}
+Где встречаем: {where_we_meet_user}
+Монетизация: {monetization}
+Конкуренция: {competition_level} — {competition_note}
+
+---
+
+СТРУКТУРА АНАЛИЗА:
+
+1. КОНКУРЕНТЫ (из своих знаний)
+   Назови реальные продукты которые уже решают эту боль.
+   Для каждого: примерная цена, главная слабость.
+   Если не знаешь конкретных — честно скажи.
+
+2. РАЗМЕР РЫНКА (грубо)
+   Сколько людей имеют эту боль?
+   Сколько из них готовы платить?
+   Грубая оценка годового дохода при 1%% конверсии.
+
+3. ГДЕ ВЗЯТЬ ПЕРВЫХ 10 ПОЛЬЗОВАТЕЛЕЙ
+   Конкретные места: какие сабреддиты, Slack/Discord группы,
+   Twitter поиск, ProductHunt, LinkedIn фильтры.
+   Не "найди целевую аудиторию" а буквально где сидят эти люди.
 
 4. MVP ЗА 2 НЕДЕЛИ
-   - Технический стек
-   - Что включить в MVP, что отложить
-   - Главные технические риски
+   Минимальный набор функций который уже можно продавать.
+   Технический стек (конкретный, не абстрактный).
+   Что точно НЕ делать в первой версии.
 
 5. ГЛАВНЫЙ РИСК
-   - Что может убить идею?
-   - Как проверить за 48 часов?
+   Одна вещь которая убьёт эту идею если не проверить.
+   Как проверить именно этот риск за 48 часов без кода.
 
-Return plain text, structured with headers. Be brutally honest."""
+6. ВЕРДИКТ
+   Одна строка: делать / не делать / делать если [условие]
 
-# Test flow — инструкция для батч-файлов
+---
+
+Пиши коротко и конкретно. Без воды.
+Если чего-то не знаешь — честно скажи, не выдумывай."""
+
+# ─────────────────────────────────────────────
+# Test flow — инструкция для Claude Code в батч-файлах
+# ─────────────────────────────────────────────
 TEST_BATCH_PROMPT = (
     "Проанализируй посты ниже. Для каждого найди конкретные боли пользователей. "
     "Запиши в data/miner.db таблица problems (raw_post_id, subreddit, problem, upvotes, source_url). "

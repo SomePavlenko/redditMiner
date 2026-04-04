@@ -75,10 +75,10 @@ def fetch_posts():
                     try:
                         conn.execute(
                             """INSERT OR IGNORE INTO raw_posts
-                            (reddit_id, subreddit, title, body, url, upvotes, parsed_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (reddit_id, subreddit, topic, title, body, url, upvotes, parsed_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                             (
-                                post["reddit_id"], sub, post["title"],
+                                post["reddit_id"], sub, topic, post["title"],
                                 post["body"], post["url"], post["upvotes"],
                                 datetime.now(timezone.utc).isoformat(),
                             ),
@@ -108,15 +108,16 @@ def fetch_comments():
     config = load_config()
     load_env()
     logger = setup_logger("s1")
+    topic = config["topic"]
     top_n = config.get("posts_for_comments_n", 15)
 
     with use_conn() as conn:
         posts = conn.execute(
             """SELECT id, reddit_id, subreddit FROM raw_posts
-            WHERE comments_fetched=0
+            WHERE comments_fetched=0 AND (topic=? OR topic='')
             ORDER BY upvotes DESC
             LIMIT ?""",
-            (top_n,),
+            (topic, top_n),
         ).fetchall()
 
         if not posts:

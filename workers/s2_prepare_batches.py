@@ -18,6 +18,7 @@ BATCH_SIZE = 40
 def prepare_batches():
     config = load_config()
     logger = setup_logger("s2")
+    topic = config["topic"]
 
     body_max = config.get("body_max_chars", 300)
     comment_max = config.get("comment_max_chars", 200)
@@ -27,10 +28,10 @@ def prepare_batches():
         posts = conn.execute(
             """SELECT id, reddit_id, subreddit, title, body, upvotes, url, comments_json
             FROM raw_posts
-            WHERE processed = 0
+            WHERE processed = 0 AND (topic=? OR topic='')
             ORDER BY upvotes DESC
             LIMIT ?""",
-            (MAX_POSTS_FOR_ANALYSIS,),
+            (topic, MAX_POSTS_FOR_ANALYSIS),
         ).fetchall()
 
     if not posts:

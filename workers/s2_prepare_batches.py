@@ -1,6 +1,6 @@
 """
-W2 — Подготовка батчей для анализа через Claude Code.
-Берёт необработанные посты, обрезает, формирует JSON-файлы с промптом внутри.
+S2 — Подготовка батчей для анализа.
+Берёт топ-150 необработанных постов по апвоутам, формирует батчи по 40.
 
 python3 -m workers.s2_prepare_batches
 """
@@ -11,12 +11,13 @@ from pathlib import Path
 from workers.helpers import load_config, setup_logger, ROOT
 from workers.db import use_conn
 
+MAX_POSTS_FOR_ANALYSIS = 150
+BATCH_SIZE = 40
 
-def prepare_batches(batch_size=None):
+
+def prepare_batches():
     config = load_config()
     logger = setup_logger("s2")
-    if batch_size is None:
-        batch_size = config["claude_batch_size"]
 
     body_max = config.get("body_max_chars", 300)
     comment_max = config.get("comment_max_chars", 200)
@@ -27,24 +28,25 @@ def prepare_batches(batch_size=None):
             """SELECT id, reddit_id, subreddit, title, body, upvotes, url, comments_json
             FROM raw_posts
             WHERE processed = 0
-            ORDER BY upvotes DESC"""
+            ORDER BY upvotes DESC
+            LIMIT ?""",
+            (MAX_POSTS_FOR_ANALYSIS,),
         ).fetchall()
 
     if not posts:
-        logger.info("W2: no unprocessed posts")
+        logger.info("S2: no unprocessed posts")
         print("Нет необработанных постов")
         return []
 
     batches_dir = Path(os.path.join(ROOT, "data", "batches"))
     batches_dir.mkdir(parents=True, exist_ok=True)
 
-    # Чистим старые батчи
     for f in batches_dir.glob("batch_*.json"):
         f.unlink()
 
     batch_files = []
-    for i in range(0, len(posts), batch_size):
-        batch = posts[i : i + batch_size]
+    for i in range(0, len(posts), BATCH_SIZE):
+        batch = posts[i : i + BATCH_SIZE]
         batch_data = []
 
         for row in batch:
@@ -53,10 +55,7 @@ def prepare_batches(batch_size=None):
                 try:
                     raw_comments = json.loads(row["comments_json"])
                     comments = [
-                        {
-                            "text": c.get("text", "")[:comment_max],
-                            "ups": c.get("ups", 0),
-                        }
+                        {"text": c.get("text", "")[:comment_max], "ups": c.get("ups", 0)}
                         for c in sorted(raw_comments, key=lambda x: x.get("ups", 0), reverse=True)[:comments_top]
                     ]
                 except json.JSONDecodeError:
@@ -72,31 +71,15 @@ def prepare_batches(batch_size=None):
                 "top_comments": comments,
             })
 
-        batch_obj = {
-            "_prompt": (
-                "Проанализируй посты ниже. Для каждого поста найди КОНКРЕТНЫЕ боли пользователей — "
-                "что не работает, что раздражает, что хотят улучшить. "
-                "Игнорируй общие жалобы без конкретики и позитивные посты.\n\n"
-                "Результат запиши в БД data/miner.db, таблица problems:\n"
-                "  INSERT INTO problems (raw_post_id, subreddit, problem, upvotes, source_url)\n"
-                "  VALUES (post_db_id, subreddit, 'текст боли', upvotes, url)\n\n"
-                "После записи пометь посты обработанными:\n"
-                "  UPDATE raw_posts SET processed=1 WHERE id IN (все post_db_id из этого батча)"
-            ),
-            "posts": batch_data,
-        }
-
-        filename = os.path.join(ROOT, "data", "batches", f"batch_{i // batch_size + 1:03d}.json")
+        filename = os.path.join(ROOT, "data", "batches", f"batch_{i // BATCH_SIZE + 1:03d}.json")
         with open(filename, "w", encoding="utf-8") as f:
-            json.dump(batch_obj, f, ensure_ascii=False, indent=2)
+            json.dump({"posts": batch_data}, f, ensure_ascii=False, indent=2)
 
         batch_files.append(filename)
-        print(f"  Создан {filename} ({len(batch_data)} постов)")
+        print(f"  Создан {os.path.basename(filename)} ({len(batch_data)} постов)")
 
-    logger.info(f"W2: prepared {len(batch_files)} batches from {len(posts)} posts")
-    print(f"\nГотово: {len(batch_files)} батчей в data/batches/")
-    print(f"\nОткрой Claude Code и скажи:")
-    print(f'  "Прочитай файлы в data/batches/, выполни _prompt из каждого файла"')
+    logger.info(f"S2: prepared {len(batch_files)} batches from {len(posts)} posts (top {MAX_POSTS_FOR_ANALYSIS})")
+    print(f"\nГотово: {len(batch_files)} батчей из топ-{len(posts)} постов")
 
     return batch_files
 

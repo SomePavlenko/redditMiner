@@ -2,7 +2,7 @@
 S3 — Анализ болей через Claude API.
 
 Берёт батчи из data/batches/, отправляет в Claude Haiku,
-сохраняет найденные боли в таблицу problems.
+извлекает боли которые можно решить софтом, сохраняет в problems.
 
 python3 -m workers.s3_save_problems
 """
@@ -10,15 +10,27 @@ python3 -m workers.s3_save_problems
 import json
 import os
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response, ROOT
 from workers.db import use_conn
 
 BATCHES_DIR = Path(os.path.join(ROOT, "data", "batches"))
 
+ANALYSIS_PROMPT = """You analyze Reddit posts to find user pain points that can be solved with software.
+
+For each post, extract ONLY specific pains:
+- What doesn't work, what frustrates, what people want improved
+- Focus on pains solvable by a SaaS tool, web service, API, browser extension, or bot
+- Ignore: vague complaints, political opinions, emotional venting without actionable problem
+
+Posts:
+{posts_json}
+
+Return ONLY JSON array, no markdown:
+[{{"post_db_id": 123, "subreddit": "jobs", "problems": ["pain 1", "pain 2"], "url": "https://..."}}]
+Empty problems array if no software-solvable pains found."""
+
 
 def analyze_batch(batch_file, config, logger):
-    """Отправляет 1 батч в Claude Haiku, возвращает список болей."""
     with open(batch_file, encoding="utf-8") as f:
         batch_obj = json.load(f)
 
@@ -26,20 +38,7 @@ def analyze_batch(batch_file, config, logger):
     if not posts:
         return []
 
-    posts_text = json.dumps(posts, ensure_ascii=False)
-
-    prompt = f"""Ты анализируешь посты Reddit для поиска проблем пользователей.
-Для каждого поста извлеки ТОЛЬКО конкретные боли —
-что не работает, что раздражает, что хотят улучшить.
-Игнорируй общие жалобы без конкретики и позитивные посты.
-
-Посты:
-{posts_text}
-
-Верни ТОЛЬКО JSON, без markdown:
-[{{"post_db_id": 123, "subreddit": "jobs", "problems": ["боль 1", "боль 2"], "url": "https://..."}}]
-Если проблем нет — верни пустой массив problems для этого поста."""
-
+    prompt = ANALYSIS_PROMPT.format(posts_json=json.dumps(posts, ensure_ascii=False))
     raw = claude_call(config["claude_model_fast"], prompt, config, logger)
     return parse_json_response(raw, logger)
 
@@ -52,59 +51,50 @@ def run():
     batch_files = sorted(BATCHES_DIR.glob("batch_*.json"))
     if not batch_files:
         logger.info("S3: no batch files found")
-        print("Нет батчей в data/batches/. Сначала запусти S2.")
+        print("Нет батчей. Сначала запусти S2.")
         return
 
     total_problems = 0
     total_posts = 0
 
-    # Обрабатываем батчи параллельно (до 5 одновременно)
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {
-            executor.submit(analyze_batch, bf, config, logger): bf
-            for bf in batch_files
-        }
+    for bf in batch_files:
+        try:
+            results = analyze_batch(bf, config, logger)
+        except json.JSONDecodeError as e:
+            logger.error(f"S3: invalid JSON for {bf.name}: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"S3: {bf.name} failed: {e}")
+            continue
 
-        for future in as_completed(futures):
-            bf = futures[future]
-            try:
-                results = future.result()
-            except json.JSONDecodeError as e:
-                logger.error(f"S3: invalid JSON from Claude for {bf.name}: {e}")
-                continue
-            except Exception as e:
-                logger.error(f"S3: batch {bf.name} failed: {e}")
-                continue
+        with use_conn() as conn:
+            for item in results:
+                post_id = item.get("post_db_id")
+                subreddit = item.get("subreddit", "")
+                url = item.get("url", "")
 
-            with use_conn() as conn:
-                for item in results:
-                    post_id = item.get("post_db_id")
-                    subreddit = item.get("subreddit", "")
-                    url = item.get("url", "")
-                    problems = item.get("problems", [])
+                if not post_id:
+                    continue
 
-                    if not post_id:
+                row = conn.execute("SELECT upvotes FROM raw_posts WHERE id=?", (post_id,)).fetchone()
+                upvotes = row["upvotes"] if row else 0
+
+                for problem_text in item.get("problems", []):
+                    if not problem_text or len(problem_text.strip()) < 5:
                         continue
+                    conn.execute(
+                        """INSERT INTO problems (raw_post_id, subreddit, problem, upvotes, source_url)
+                        VALUES (?, ?, ?, ?, ?)""",
+                        (post_id, subreddit, problem_text.strip(), upvotes, url),
+                    )
+                    total_problems += 1
 
-                    row = conn.execute("SELECT upvotes FROM raw_posts WHERE id=?", (post_id,)).fetchone()
-                    upvotes = row["upvotes"] if row else 0
+                conn.execute("UPDATE raw_posts SET processed=1 WHERE id=?", (post_id,))
+                total_posts += 1
 
-                    for problem_text in problems:
-                        if not problem_text or len(problem_text.strip()) < 5:
-                            continue
-                        conn.execute(
-                            """INSERT INTO problems (raw_post_id, subreddit, problem, upvotes, source_url)
-                            VALUES (?, ?, ?, ?, ?)""",
-                            (post_id, subreddit, problem_text.strip(), upvotes, url),
-                        )
-                        total_problems += 1
+            conn.commit()
 
-                    conn.execute("UPDATE raw_posts SET processed=1 WHERE id=?", (post_id,))
-                    total_posts += 1
-
-                conn.commit()
-
-            logger.info(f"S3: processed {bf.name}")
+        logger.info(f"S3: processed {bf.name}")
 
     logger.info(f"S3: saved {total_problems} problems from {total_posts} posts")
     print(f"S3: сохранено {total_problems} болей из {total_posts} постов")

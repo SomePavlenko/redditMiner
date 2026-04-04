@@ -40,30 +40,27 @@ def run():
         for p in problems
     ]
 
-    prompt = f"""Ты аналитик пользовательских проблем. Тема: "{topic}"
+    prompt = f"""You are a user pain analyst. Topic: "{topic}"
 
-Ниже список болей пользователей Reddit ({len(problems_list)} штук).
-Многие описывают одну и ту же проблему разными словами.
+Below are {len(problems_list)} user pain points from Reddit.
+Many describe the same problem in different words.
 
-ЗАДАНИЕ:
-1. Сгруппируй похожие боли в кластеры (5-20 кластеров)
-2. Дай каждому короткое название (3-5 слов)
-3. Напиши summary — суть боли в 1-2 предложения
+TASK:
+1. Group similar pains into clusters (5-20 clusters)
+2. Give each a short name (3-5 words, in Russian)
+3. Write summary — essence of the pain in 1-2 sentences (in Russian)
+4. Focus on pains that could be solved with software/SaaS
 
-Верни ТОЛЬКО JSON, без markdown:
-[{{
-  "cluster_name": "Название кластера",
-  "summary": "Суть проблемы",
-  "problem_ids": [1, 5, 12],
-  "subreddits": ["jobs", "careerguidance"]
-}}]
+Return ONLY JSON array, no markdown:
+[{{"cluster_name": "Название кластера", "summary": "Суть проблемы", "problem_ids": [1, 5, 12]}}]
 
-ПРАВИЛА:
-- Одна проблема может быть только в одном кластере
-- Не создавай кластер "Прочее"
-- Названия конкретные: "ATS отклоняет резюме" а не "Проблемы с резюме"
+RULES:
+- One problem can only be in one cluster
+- No "Other" or "Miscellaneous" clusters
+- Names must be specific: "ATS rejects resumes" not "Resume problems"
+- cluster_name and summary MUST be in Russian
 
-Боли:
+Pains:
 {json.dumps(problems_list, ensure_ascii=False)}"""
 
     logger.info(f"S4: sending {len(problems_list)} problems to Claude for clustering")

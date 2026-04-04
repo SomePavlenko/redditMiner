@@ -178,25 +178,22 @@ export default function Run() {
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader><CardTitle className="text-base text-white">Параметры</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            <div className="space-y-3">
               {([
-                ['min_upvotes', 'Мин. апвоутов', ''],
-                ['reddit_api_limit', 'Reddit лимит', 'запросов'],
-                ['posts_for_comments_n', 'Комментов к постам', ''],
-                ['claude_batch_size', 'Размер батча', ''],
-                ['body_max_chars', 'Body лимит', 'символов'],
-              ] as const).map(([key, label, suffix]) => (
-                <div key={key} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-gray-400 shrink-0">{label}</span>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      value={params[key]}
-                      onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) || 0 }))}
-                      className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-right text-gray-100 focus:border-indigo-500 focus:outline-none"
-                    />
-                    {suffix && <span className="text-xs text-gray-500 w-16">{suffix}</span>}
-                  </div>
+                ['min_upvotes', 'Мин. апвоутов'],
+                ['reddit_api_limit', 'Reddit лимит'],
+                ['posts_for_comments_n', 'Комментов к постам'],
+                ['claude_batch_size', 'Размер батча'],
+                ['body_max_chars', 'Body лимит (символов)'],
+              ] as const).map(([key, label]) => (
+                <div key={key} className="flex items-center gap-4">
+                  <span className="text-sm text-gray-400 w-48">{label}</span>
+                  <input
+                    type="number"
+                    value={params[key]}
+                    onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) || 0 }))}
+                    className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-center text-gray-100 focus:border-indigo-500 focus:outline-none"
+                  />
                 </div>
               ))}
             </div>

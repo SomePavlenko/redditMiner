@@ -286,11 +286,12 @@ def run_worker(worker: str):
     return {"worker": worker, "status": "started"}
 
 
-# ── SSE pipeline run with live logs ──────────────────────────────────────────
+# ── Pipeline runs with persistent IDs ─────────────────────────────────────────
 
 from fastapi.responses import StreamingResponse
 import asyncio
-import io
+from datetime import datetime as dt
+import uuid
 
 STAGES = [
     ("S0", "Разведка сабреддитов", "workers.s0_scout_subreddits"),
@@ -302,8 +303,62 @@ STAGES = [
 ]
 
 
-@app.get("/api/run/stream")
+def _build_summary(run_topic):
+    with use_conn() as conn:
+        return {
+            "stats": {
+                "posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (run_topic,)).fetchone()[0],
+                "problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (run_topic,)).fetchone()[0],
+                "clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (run_topic,)).fetchone()[0],
+                "ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (run_topic,)).fetchone()[0],
+            },
+            "top_ideas": [
+                dict(r) for r in conn.execute(
+                    """SELECT id, title, score, pain, competition_level, monetization, validation_step
+                    FROM ideas WHERE topic=? AND is_duplicate=0
+                    ORDER BY score DESC LIMIT 5""",
+                    (run_topic,),
+                ).fetchall()
+            ],
+            "top_clusters": [
+                dict(r) for r in conn.execute(
+                    """SELECT id, cluster_name, pain_score, frequency, summary
+                    FROM pain_clusters WHERE topic=?
+                    ORDER BY pain_score DESC LIMIT 5""",
+                    (run_topic,),
+                ).fetchall()
+            ],
+        }
+
+
+@app.get("/api/runs")
+def list_runs():
+    with use_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, topic, status, created_at FROM runs ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/run/{run_id}")
+def get_run(run_id: str):
+    with use_conn() as conn:
+        row = conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Run not found")
+        result = dict(row)
+        if result.get("logs_json"):
+            result["logs"] = json.loads(result["logs_json"])
+        if result.get("result_json"):
+            result["result"] = json.loads(result["result_json"])
+        if result.get("params_json"):
+            result["params"] = json.loads(result["params_json"])
+        return result
+
+
+@app.get("/api/run/{run_id}/stream")
 async def run_pipeline_stream(
+    run_id: str,
     topic: str = None,
     min_upvotes: int = None,
     reddit_api_limit: int = None,
@@ -311,13 +366,29 @@ async def run_pipeline_stream(
     claude_batch_size: int = None,
     body_max_chars: int = None,
 ):
-    """Runs the full pipeline and streams logs as SSE events.
-    Params override config for this run only."""
+    """Runs pipeline for given run_id, streams logs as SSE, persists to DB."""
+
+    # Check if run exists and is not already done
+    with use_conn() as conn:
+        existing = conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
+        if existing and existing["status"] != "pending":
+            # Already running or done — just stream what we have
+            run_data = conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+            async def replay():
+                logs = json.loads(run_data["logs_json"] or "[]")
+                for log in logs:
+                    yield f"data: {json.dumps(log, ensure_ascii=False)}\n\n"
+                if run_data["result_json"]:
+                    result = json.loads(run_data["result_json"])
+                    result["type"] = "done"
+                    yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+            return StreamingResponse(replay(), media_type="text/event-stream")
 
     async def generate():
         import time
+        all_logs = []
 
-        # Apply overrides to config for this run
+        # Apply overrides
         cfg = load_config()
         overrides = {}
         if topic:
@@ -336,12 +407,29 @@ async def run_pipeline_stream(
         if overrides:
             cfg.update(overrides)
             save_config(cfg)
-            yield f"data: {json.dumps({'type': 'log', 'text': f'Параметры прогона: {overrides}'}, ensure_ascii=False)}\n\n"
 
         run_topic = cfg.get("topic", "")
 
+        # Update run status
+        with use_conn() as conn:
+            conn.execute(
+                "UPDATE runs SET status='running', topic=?, params_json=? WHERE id=?",
+                (run_topic, json.dumps(overrides, ensure_ascii=False), run_id),
+            )
+            conn.commit()
+
+        def emit(event):
+            all_logs.append(event)
+            return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+        if overrides:
+            yield emit({"type": "log", "text": f"Параметры: {overrides}"})
+
+        success = True
+        failed_stage = None
+
         for stage_id, stage_name, module in STAGES:
-            yield f"data: {json.dumps({'type': 'stage_start', 'stage': stage_id, 'name': stage_name})}\n\n"
+            yield emit({"type": "stage_start", "stage": stage_id, "name": stage_name})
 
             start = time.time()
             proc = await asyncio.create_subprocess_exec(
@@ -354,47 +442,52 @@ async def run_pipeline_stream(
             async for line in proc.stdout:
                 text = line.decode("utf-8", errors="replace").rstrip()
                 if text:
-                    yield f"data: {json.dumps({'type': 'log', 'stage': stage_id, 'text': text})}\n\n"
+                    yield emit({"type": "log", "stage": stage_id, "text": text})
 
             await proc.wait()
             elapsed = round(time.time() - start, 1)
 
             if proc.returncode != 0:
-                yield f"data: {json.dumps({'type': 'stage_error', 'stage': stage_id, 'elapsed': elapsed})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'success': False, 'failed_stage': stage_id})}\n\n"
-                return
+                yield emit({"type": "stage_error", "stage": stage_id, "elapsed": elapsed})
+                success = False
+                failed_stage = stage_id
+                break
             else:
-                yield f"data: {json.dumps({'type': 'stage_done', 'stage': stage_id, 'elapsed': elapsed})}\n\n"
+                yield emit({"type": "stage_done", "stage": stage_id, "elapsed": elapsed})
 
-        # Collect summary — use run_topic saved at start, not current config
+        # Build result
+        if success:
+            summary = _build_summary(run_topic)
+            result = {"type": "done", "success": True, "topic": run_topic, **summary}
+        else:
+            result = {"type": "done", "success": False, "topic": run_topic, "failed_stage": failed_stage}
+
+        yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+
+        # Persist to DB
         with use_conn() as conn:
-            summary = {
-                "type": "done",
-                "success": True,
-                "topic": run_topic,
-                "stats": {
-                    "posts": conn.execute("SELECT COUNT(*) FROM raw_posts WHERE topic=?", (run_topic,)).fetchone()[0],
-                    "problems": conn.execute("SELECT COUNT(*) FROM problems WHERE topic=?", (run_topic,)).fetchone()[0],
-                    "clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters WHERE topic=?", (run_topic,)).fetchone()[0],
-                    "ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0 AND topic=?", (run_topic,)).fetchone()[0],
-                },
-                "top_ideas": [
-                    dict(r) for r in conn.execute(
-                        """SELECT id, title, score, pain, competition_level, monetization, validation_step
-                        FROM ideas WHERE topic=? AND is_duplicate=0
-                        ORDER BY score DESC LIMIT 5""",
-                        (run_topic,),
-                    ).fetchall()
-                ],
-                "top_clusters": [
-                    dict(r) for r in conn.execute(
-                        """SELECT id, cluster_name, pain_score, frequency, summary
-                        FROM pain_clusters WHERE topic=?
-                        ORDER BY pain_score DESC LIMIT 5""",
-                        (run_topic,),
-                    ).fetchall()
-                ],
-            }
-        yield f"data: {json.dumps(summary, ensure_ascii=False)}\n\n"
+            conn.execute(
+                "UPDATE runs SET status=?, logs_json=?, result_json=? WHERE id=?",
+                (
+                    "done" if success else "failed",
+                    json.dumps(all_logs, ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False),
+                    run_id,
+                ),
+            )
+            conn.commit()
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/api/run/create")
+def create_run():
+    """Creates a new run with a unique ID."""
+    run_id = dt.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    with use_conn() as conn:
+        conn.execute(
+            "INSERT INTO runs (id, topic, status) VALUES (?, ?, 'pending')",
+            (run_id, load_config().get("topic", "")),
+        )
+        conn.commit()
+    return {"run_id": run_id}

@@ -127,6 +127,20 @@ def init_db():
         _migrate(conn, "ideas", "deep_analysis_result", "TEXT")
         _migrate(conn, "ideas", "feasibility_breakdown", "TEXT")
 
+        # Runs table
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS runs (
+          id TEXT PRIMARY KEY,
+          topic TEXT NOT NULL,
+          params_json TEXT,
+          status TEXT DEFAULT 'running',
+          logs_json TEXT DEFAULT '[]',
+          result_json TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        conn.commit()
+
 
 def _migrate(conn, table, column, col_type):
     try:

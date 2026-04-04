@@ -47,8 +47,10 @@ interface SimNode {
   y: number
   vx: number
   vy: number
-  // metadata for tooltip
-  sourceId?: number
+  // metadata for tooltip & detail card
+  sourceId?: number     // DB id for ideas
+  clusterId?: number    // DB id for clusters
+  subName?: string      // subreddit name (without r/)
   score?: number
   clusterName?: string
   painScore?: number
@@ -103,6 +105,7 @@ function buildGraph(ideas: Idea[], clusterMap: Map<number, ClusterInfo>) {
           id: key, label: `r/${sub}`, type: 'subreddit',
           size: 5, color: SUB_COLOR,
           x: 0, y: 0, vx: 0, vy: 0,
+          subName: sub,
         })
       }
       links.push({ from: ideaKey, to: key })
@@ -123,6 +126,7 @@ function buildGraph(ideas: Idea[], clusterMap: Map<number, ClusterInfo>) {
           size: 4,
           color: CLUSTER_COLOR,
           x: 0, y: 0, vx: 0, vy: 0,
+          clusterId: cid,
           clusterName: info?.cluster_name,
           painScore: info?.pain_score,
         })
@@ -209,7 +213,7 @@ function runTick(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function BubbleChart({ ideas, onSelect }: Props) {
+export default function BubbleChart({ ideas }: Props) {
   const canvasRef      = useRef<HTMLCanvasElement>(null)
   const stateRef       = useRef<{
     nodes: SimNode[]
@@ -244,6 +248,7 @@ export default function BubbleChart({ ideas, onSelect }: Props) {
 
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null })
   const tooltipRef = useRef<TooltipState>({ visible: false, x: 0, y: 0, node: null })
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
   // ── helpers: coordinate transforms ──────────────────────────────────────────
 
@@ -488,10 +493,12 @@ export default function BubbleChart({ ideas, onSelect }: Props) {
     const cx   = (e.clientX - rect.left) * DPR
     const cy   = (e.clientY - rect.top)  * DPR
     const hit  = hitTest(cx, cy)
-    if (hit?.sourceId != null) {
-      onSelect(hit.sourceId)
+    if (hit) {
+      setSelectedNodeId(prev => prev === hit.id ? null : hit.id)
+    } else {
+      setSelectedNodeId(null)
     }
-  }, [hitTest, onSelect])
+  }, [hitTest])
 
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()

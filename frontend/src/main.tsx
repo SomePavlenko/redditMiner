@@ -36,6 +36,7 @@ function Layout() {
           <Route path="/ideas/:id" element={<IdeaDetail />} />
           <Route path="/clusters/:id" element={<ClusterDetail />} />
           <Route path="/run" element={<Run />} />
+          <Route path="/run/:runId" element={<Run />} />
         </Routes>
       </main>
     </div>

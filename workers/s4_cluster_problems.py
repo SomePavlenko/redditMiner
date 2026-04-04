@@ -78,7 +78,17 @@ def run():
 
         for cluster in clusters:
             problem_ids = cluster.get("problem_ids", [])
-            subreddits = cluster.get("subreddits", [])
+
+            # Get actual subreddits from problems table
+            if problem_ids:
+                placeholders = ",".join("?" * len(problem_ids))
+                sub_rows = conn.execute(
+                    f"SELECT DISTINCT subreddit FROM problems WHERE id IN ({placeholders})",
+                    problem_ids,
+                ).fetchall()
+                subreddits = [r["subreddit"] for r in sub_rows]
+            else:
+                subreddits = []
 
             frequency = len(problem_ids)
             subreddit_spread = len(set(subreddits))

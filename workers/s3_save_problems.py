@@ -11,10 +11,10 @@ import json
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response
+from workers.helpers import load_config, load_env, setup_logger, claude_call, parse_json_response, ROOT
 from workers.db import use_conn
 
-BATCHES_DIR = Path("data/batches")
+BATCHES_DIR = Path(os.path.join(ROOT, "data", "batches"))
 
 
 def analyze_batch(batch_file, config, logger):

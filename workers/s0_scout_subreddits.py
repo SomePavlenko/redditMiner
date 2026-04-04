@@ -3,8 +3,8 @@ W0 — Topic Agent.
 Находит сабреддиты по теме. Работает только через Claude Code (без API).
 
 Режимы:
-  python3 -m workers.w0_topic --add jobs,resumes,careerguidance   # добавить вручную
-  python3 -m workers.w0_topic                                      # подготовить промпт для Claude Code
+  python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance   # добавить вручную
+  python3 -m workers.s0_scout_subreddits                                      # подготовить промпт для Claude Code
 """
 
 import hashlib
@@ -36,7 +36,6 @@ def save_topic_hash(topic):
 def add_subreddits(names, topic, logger):
     """Добавить сабреддиты вручную."""
     with use_conn() as conn:
-        conn.execute("UPDATE subreddits SET active=0 WHERE topic=?", (topic,))
         for name in names:
             name = name.strip().lower()
             if not name:
@@ -65,7 +64,7 @@ def prepare_prompt(topic, logger):
 Не нужны новостные или развлекательные сабреддиты.
 
 Верни результат как команду для терминала:
-python3 -m workers.w0_topic --add sub1,sub2,sub3,...
+python3 -m workers.s0_scout_subreddits --add sub1,sub2,sub3,...
 
 Используй реальные названия сабреддитов без r/ префикса."""
 
@@ -77,7 +76,7 @@ python3 -m workers.w0_topic --add sub1,sub2,sub3,...
     print(f"\nОткрой Claude Code и скажи:")
     print(f'  "Прочитай {prompt_file} и выполни задание"')
     print(f"\nИли добавь вручную:")
-    print(f"  python3 -m workers.w0_topic --add jobs,resumes,careerguidance")
+    print(f"  python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance")
 
 
 def show_status(topic, logger):
@@ -103,7 +102,7 @@ def show_status(topic, logger):
 def run(force=False):
     config = load_config()
     topic = config["topic"]
-    logger = setup_logger("w0")
+    logger = setup_logger("s0")
 
     # Если --add, добавляем вручную
     if "--add" in sys.argv:
@@ -114,7 +113,7 @@ def run(force=False):
             show_status(topic, logger)
             return
         else:
-            print("Использование: python3 -m workers.w0_topic --add jobs,resumes,careerguidance")
+            print("Использование: python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance")
             return
 
     # Проверяем: есть ли уже сабреддиты для этой темы

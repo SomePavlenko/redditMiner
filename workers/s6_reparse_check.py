@@ -1,8 +1,13 @@
-import json
+"""
+S6 — Проверка перепарсинга сабреддитов.
+Находит сабреддиты которые давно не парсились и у которых были хорошие идеи.
+Отправляет напоминания в Telegram.
+
+python3 -m workers.s6_reparse_check
+"""
+
 import os
 import httpx
-from datetime import datetime, timedelta
-from pathlib import Path
 from workers.helpers import load_config, load_env, setup_logger
 from workers.db import use_conn
 
@@ -11,7 +16,7 @@ def send_telegram(message, logger):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        logger.warning("W3: Telegram credentials not configured, skipping send")
+        logger.warning("S6: Telegram not configured")
         return False
     try:
         resp = httpx.post(
@@ -22,61 +27,43 @@ def send_telegram(message, logger):
         resp.raise_for_status()
         return True
     except Exception as e:
-        logger.error(f"W3: Telegram send failed: {e}")
+        logger.error(f"S6: Telegram failed: {e}")
         return False
 
 
-def prepare_digest_context():
+def run():
     config = load_config()
-    logger = setup_logger("w3")
-    topic = config["topic"]
+    load_env()
+    logger = setup_logger("s6")
 
     with use_conn() as conn:
-        problems = conn.execute(
-            """SELECT problem, subreddit, upvotes, source_url
-            FROM problems
-            WHERE parsed_at >= datetime('now', '-7 days')
-            ORDER BY upvotes DESC
-            LIMIT 200"""
+        subs = conn.execute(
+            """SELECT name, total_ideas FROM subreddits
+            WHERE total_ideas > 0
+            AND last_parsed_at <= datetime('now', ? || ' days')
+            AND queue_reparse = 0 AND active = 1""",
+            (f"-{config['reparse_days']}",),
         ).fetchall()
 
-    if not problems:
-        logger.info("W3: no recent problems found")
-        print("Нет болей за последние 7 дней")
-        return None
+        sent = 0
+        for sub in subs:
+            top_idea = conn.execute(
+                """SELECT title, score FROM ideas
+                WHERE subreddits LIKE ? ORDER BY score DESC LIMIT 1""",
+                (f'%"{sub["name"]}"%',),
+            ).fetchone()
 
-    context = {
-        "topic": topic,
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "total_problems": len(problems),
-        "idea_score_threshold": config["idea_score_threshold"],
-        "digest_min_ideas": config["digest_min_ideas"],
-        "problems": [
-            {
-                "problem": p["problem"],
-                "upvotes": p["upvotes"],
-                "subreddit": p["subreddit"],
-                "url": p["source_url"],
-            }
-            for p in problems
-        ],
-    }
+            if top_idea:
+                msg = (
+                    f"📌 Пора перепарсить: r/{sub['name']}\n"
+                    f"Ранее нашли {sub['total_ideas']} идей\n"
+                    f"Лучшая: {top_idea['title']} (⭐{top_idea['score']})\n"
+                )
+                if send_telegram(msg, logger):
+                    sent += 1
 
-    Path("data").mkdir(exist_ok=True)
-    with open("data/digest_context.json", "w", encoding="utf-8") as f:
-        json.dump(context, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"W3: prepared digest context with {len(problems)} problems")
-    print(f"Контекст готов: data/digest_context.json ({len(problems)} болей)")
-    print(f"\nТеперь запусти Claude Code:")
-    print(f'  claude')
-    print(f'  > "Прочитай data/digest_context.json и сгенерируй топ идей для продуктов"')
-
-    return "data/digest_context.json"
-
-
-def run():
-    prepare_digest_context()
+    logger.info(f"S6: sent {sent} reparse reminders")
+    print(f"S6: отправлено {sent} напоминаний")
 
 
 if __name__ == "__main__":

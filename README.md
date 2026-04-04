@@ -23,7 +23,7 @@ python3 -m uvicorn api.main:app --reload --port 8000
 cd frontend && npm run dev
 
 # 5. Первый запуск цепочки (терминал 3)
-python3 -m workers.run_all
+python3 -m workers.run_pipeline
 ```
 
 Фронт: http://localhost:3000
@@ -73,59 +73,52 @@ Telegram просто дублирует дайджест в чат.
 
 ---
 
-## Запуск воркеров
+## Запуск
 
-### Вся цепочка сразу (cold start)
+### Полный автоматический пайплайн
 ```bash
-python3 -m workers.run_all
+# 1. Добавить сабреддиты (один раз)
+python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance
+
+# 2. Запустить всю цепочку (S0→S1→S2→S3→S4→S5)
+python3 -m workers.run_pipeline
 ```
 
 ### По отдельности
 ```bash
-python3 -m workers.w0_topic --force   # найти сабреддиты для темы
-python3 -m workers.w1_parser           # спарсить посты из Reddit (публичный JSON)
-python3 -m workers.w2_analyzer         # подготовить батчи для анализа → data/batches/
-python3 -m workers.w3_digest           # подготовить контекст для идей → data/digest_context.json
-python3 -m workers.w4_reparse          # напомнить о старых сабреддитах
+python3 -m workers.s0_scout_subreddits --add jobs,resumes   # добавить сабреддиты
+python3 -m workers.s1_fetch_reddit posts                     # парсить посты
+python3 -m workers.s1_fetch_reddit comments                  # загрузить комменты к топ постам
+python3 -m workers.s2_prepare_batches                        # подготовить батчи
+python3 -m workers.s3_save_problems                          # анализ болей (Claude Haiku)
+python3 -m workers.s4_cluster_problems                       # кластеризация (Claude Haiku)
+python3 -m workers.s5_generate_ideas                         # генерация идей (Claude Sonnet)
 ```
 
-### Анализ через Claude Code (после W2/W3)
+### Тестовый прогон (для отладки)
 ```bash
-claude
-> "Прочитай data/batches/, извлеки боли, запиши в БД таблица problems.
-   Пометь посты processed=1. Потом прочитай data/digest_context.json,
-   сгенерируй топ идеи и запиши в БД таблица ideas."
+python3 -m workers.test_flow
 ```
 
-### Через API (из фронта или curl)
+### Через API
 ```bash
-curl -X POST http://localhost:8000/api/workers/run/all
-curl -X POST http://localhost:8000/api/workers/run/w1
+curl -X POST http://localhost:8000/api/workers/run/pipeline
+curl -X POST http://localhost:8000/api/workers/run/s1
 ```
 
 ---
 
 ## Автоматический запуск (cron)
 
-### Вариант 1: через setup.sh
-```bash
-./setup.sh
-```
-Добавит cron задачи автоматически.
-
-### Вариант 2: вручную
 ```bash
 crontab -e
 ```
 Добавить:
 ```
-0 2 * * * cd /Users/alex/Documents/petProj/redditMiner && python3 -m workers.w1_parser >> logs/cron.log 2>&1
-0 3 * * * cd /Users/alex/Documents/petProj/redditMiner && python3 -m workers.w2_analyzer >> logs/cron.log 2>&1
-0 4 * * * cd /Users/alex/Documents/petProj/redditMiner && python3 -m workers.w3_digest >> logs/cron.log 2>&1
-0 5 * * * cd /Users/alex/Documents/petProj/redditMiner && python3 -m workers.w4_reparse >> logs/cron.log 2>&1
+0 2 * * * cd /Users/alex/Documents/petProj/redditMiner && python3 -m workers.run_pipeline >> logs/cron.log 2>&1
 ```
 
-Проверить что задачи добавлены: `crontab -l`
+Один cron job запускает весь пайплайн (S0→S5) автоматически.
 
 **Важно:** cron на macOS работает только когда мак не спит.
 
@@ -134,30 +127,23 @@ crontab -e
 ## Как работает система
 
 ```
-Ночь 02:00  →  W1 парсит Reddit через публичный JSON (автоматически по cron)
-      03:00  →  W2 готовит батчи из новых постов (автоматически по cron)
-      04:00  →  W3 готовит контекст для дайджеста (автоматически по cron)
-Утро        →  Открываешь Claude Code, запускаешь анализ батчей + генерацию идей
-              →  Смотришь результаты на localhost:3000
+Ночь 02:00  →  run_pipeline запускает:
+                S0: проверяет сабреддиты
+                S1: парсит Reddit (публичный JSON, без ключей)
+                S2: режет данные через trimmer, формирует батчи
+                S3: отправляет батчи в Claude Haiku → боли в БД
+                S4: кластеризует боли через Claude Haiku → pain_clusters с pain_score
+                S5: генерит идеи через Claude Sonnet → скоринг + дедуп → ideas в БД
+Утро        →  Смотришь результаты на localhost:3000 или через API
 ```
 
 ---
 
-## Смена темы исследования
+## Смена темы
 
-Поменяй `topic` в `config.json`:
-```json
-{
-  "topic": "remote work tools"
-}
-```
-Запусти W0 чтобы найти новые сабреддиты:
+Поменяй `topic` в `config.json`, добавь сабреддиты:
 ```bash
-python3 -m workers.w0_topic --force
-```
-Или поменяй через API — W0 запустится автоматически:
-```bash
-curl -X POST http://localhost:8000/api/config -H "Content-Type: application/json" -d '{"topic": "remote work tools"}'
+python3 -m workers.s0_scout_subreddits --add newsubreddit1,newsubreddit2
 ```
 
 ---
@@ -165,22 +151,25 @@ curl -X POST http://localhost:8000/api/config -H "Content-Type: application/json
 ## Структура проекта
 
 ```
-config.json       ← настройки (тема, лимиты, расписание)
-.env              ← секреты (API ключи) — не коммитится
-data/miner.db     ← SQLite база со всеми данными
-logs/             ← логи воркеров по дням
-.topic_hash       ← хеш текущей темы для отслеживания изменений
+config.json                  ← настройки (описание: docs/config_reference.md)
+.env                         ← секреты (ANTHROPIC_API_KEY) — не коммитится
+data/miner.db                ← SQLite база
+logs/                        ← логи по дням
 
 workers/
-  w0_topic.py     ← поиск сабреддитов по теме
-  w1_parser.py    ← парсинг Reddit
-  w2_analyzer.py  ← извлечение болей (Claude Haiku)
-  w3_digest.py    ← генерация идей (Claude Sonnet) + Telegram
-  w4_reparse.py   ← напоминания о перепарсинге
-  run_all.py      ← запуск всей цепочки
+  s0_scout_subreddits.py     ← S0: разведка сабреддитов
+  s1_fetch_reddit.py         ← S1: парсинг Reddit (посты + комменты)
+  trimmer.py                 ← обрезка данных Reddit (97 полей → 7)
+  s2_prepare_batches.py      ← S2: формирование батчей
+  s3_save_problems.py        ← S3: анализ болей через Claude Haiku
+  s4_cluster_problems.py     ← S4: кластеризация через Claude Haiku
+  s5_generate_ideas.py       ← S5: идеи через Claude Sonnet + скоринг
+  s6_reparse_check.py        ← S6: напоминания о перепарсинге (Telegram)
+  run_pipeline.py            ← полный пайплайн S0→S5
+  test_flow.py               ← тестовый мини-прогон
 
-api/main.py       ← FastAPI REST API
-frontend/         ← React + Vite + Tailwind дашборд
+api/main.py                  ← FastAPI REST API
+frontend/                    ← React + Vite + Tailwind дашборд
 ```
 
 ---
@@ -188,18 +177,22 @@ frontend/         ← React + Vite + Tailwind дашборд
 ## Полезные команды
 
 ```bash
-# Посмотреть статистику
+# Статистика
 curl http://localhost:8000/api/stats
 
-# Посмотреть идеи
+# Идеи
 curl http://localhost:8000/api/ideas
 
-# Посмотреть сабреддиты
-curl http://localhost:8000/api/subreddits
+# Кластеры болей
+curl http://localhost:8000/api/clusters
 
-# Открыть БД напрямую
-sqlite3 data/miner.db "SELECT title, score FROM ideas ORDER BY score DESC LIMIT 10;"
+# Боли
+curl http://localhost:8000/api/problems
 
-# Посмотреть логи
-cat logs/w1_$(date +%Y%m%d).log
+# БД напрямую
+sqlite3 data/miner.db "SELECT title, score FROM ideas WHERE is_duplicate=0 ORDER BY score DESC LIMIT 10;"
+sqlite3 data/miner.db "SELECT cluster_name, pain_score FROM pain_clusters ORDER BY pain_score DESC;"
+
+# Логи
+cat logs/s1_$(date +%Y%m%d).log
 ```

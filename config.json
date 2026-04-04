@@ -1,7 +1,7 @@
 {
   "_doc": "Reddit Miner — все настройки. Описание: docs/config_reference.md",
 
-  "topic": "job search",
+  "topic": "job search, jobs, resumes, careerguidance",
 
   "min_upvotes": 50,
   "reddit_posts_per_request": 100,

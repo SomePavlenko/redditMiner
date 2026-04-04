@@ -1,8 +1,8 @@
 """
-W1 — Reddit Parser. Два шага:
-  W1a: python3 -m workers.w1_parser posts     — получить посты (1 запрос/сабреддит)
-  W1b: python3 -m workers.w1_parser comments  — получить комменты к топ постам
-  python3 -m workers.w1_parser                 — оба шага последовательно
+S1 — Reddit Parser. Два шага:
+  S1a: python3 -m workers.s1_fetch_reddit posts     — получить посты (1 запрос/сабреддит)
+  S1b: python3 -m workers.s1_fetch_reddit comments  — получить комменты к топ постам
+  python3 -m workers.s1_fetch_reddit                 — оба шага последовательно
 """
 
 import sys
@@ -32,7 +32,7 @@ def fetch_posts():
     """W1a: получить посты из сабреддитов, обрезать через trimmer, сохранить в БД."""
     config = load_config()
     load_env()
-    logger = setup_logger("w1")
+    logger = setup_logger("s1")
     topic = config["topic"]
 
     with use_conn() as conn:
@@ -107,7 +107,7 @@ def fetch_comments():
     """W1b: получить комменты к топ постам, обрезать через trimmer, дописать в БД."""
     config = load_config()
     load_env()
-    logger = setup_logger("w1")
+    logger = setup_logger("s1")
     top_n = config.get("posts_for_comments_n", 15)
 
     with use_conn() as conn:

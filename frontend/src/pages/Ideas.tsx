@@ -7,9 +7,12 @@ interface Idea {
   description: string
   product_example: string
   score: number
-  market_score: number
-  difficulty_score: number
+  demand_score: number
+  breadth_score: number
+  feasibility_score: number
   uniqueness_score: number
+  revenue_model: string
+  solves_clusters: string
   subreddits: string
   source_urls: string
   is_favourite: number

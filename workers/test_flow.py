@@ -188,12 +188,13 @@ def step4_prepare_batch():
         "posts": batch_data,
     }
 
-    batches_dir = Path("data/batches")
+    root = os.path.join(os.path.dirname(__file__), "..")
+    batches_dir = Path(os.path.join(root, "data", "batches"))
     batches_dir.mkdir(parents=True, exist_ok=True)
     for f in batches_dir.glob("test_batch_*.json"):
         f.unlink()
 
-    filename = "data/batches/test_batch_001.json"
+    filename = os.path.join(root, "data", "batches", "test_batch_001.json")
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(batch_obj, f, ensure_ascii=False, indent=2)
 

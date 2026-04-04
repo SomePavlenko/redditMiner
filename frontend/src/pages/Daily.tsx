@@ -8,9 +8,12 @@ interface Idea {
   description: string
   product_example: string
   score: number
-  market_score: number
-  difficulty_score: number
+  demand_score: number
+  breadth_score: number
+  feasibility_score: number
   uniqueness_score: number
+  revenue_model: string
+  solves_clusters: string
   subreddits: string
   source_urls: string
   is_favourite: number
@@ -78,11 +81,11 @@ export default function Daily() {
           >Список</button>
         </div>
         <div className="ml-auto flex gap-2">
-          {['w1', 'w2', 'w3'].map(w => (
+          {['s1', 's2', 's3'].map(w => (
             <button key={w} onClick={() => runWorker(w)}
               className="px-3 py-1 bg-gray-800 rounded text-xs hover:bg-gray-700 uppercase">{w}</button>
           ))}
-          <button onClick={() => runWorker('all')}
+          <button onClick={() => runWorker('pipeline')}
             className="px-3 py-1 bg-indigo-600 rounded text-xs hover:bg-indigo-500">Все</button>
         </div>
       </div>

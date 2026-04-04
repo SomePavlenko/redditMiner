@@ -2,18 +2,19 @@
 W2 — Подготовка батчей для анализа через Claude Code.
 Берёт необработанные посты, обрезает, формирует JSON-файлы с промптом внутри.
 
-python3 -m workers.w2_analyzer
+python3 -m workers.s2_prepare_batches
 """
 
 import json
+import os
 from pathlib import Path
-from workers.helpers import load_config, setup_logger
+from workers.helpers import load_config, setup_logger, ROOT
 from workers.db import use_conn
 
 
 def prepare_batches(batch_size=None):
     config = load_config()
-    logger = setup_logger("w2")
+    logger = setup_logger("s2")
     if batch_size is None:
         batch_size = config["claude_batch_size"]
 
@@ -34,7 +35,7 @@ def prepare_batches(batch_size=None):
         print("Нет необработанных постов")
         return []
 
-    batches_dir = Path("data/batches")
+    batches_dir = Path(os.path.join(ROOT, "data", "batches"))
     batches_dir.mkdir(parents=True, exist_ok=True)
 
     # Чистим старые батчи
@@ -85,7 +86,7 @@ def prepare_batches(batch_size=None):
             "posts": batch_data,
         }
 
-        filename = f"data/batches/batch_{i // batch_size + 1:03d}.json"
+        filename = os.path.join(ROOT, "data", "batches", f"batch_{i // batch_size + 1:03d}.json")
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(batch_obj, f, ensure_ascii=False, indent=2)
 

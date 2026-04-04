@@ -138,6 +138,35 @@ def queue_subreddit(name: str):
         return {"name": name, "queued": True}
 
 
+@app.get("/api/clusters")
+def get_clusters(topic: str = None):
+    with use_conn() as conn:
+        if topic:
+            rows = conn.execute(
+                "SELECT * FROM pain_clusters WHERE topic=? ORDER BY pain_score DESC", (topic,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM pain_clusters ORDER BY pain_score DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.get("/api/problems")
+def get_problems(cluster_id: int = None, subreddit: str = None, limit: int = 100):
+    with use_conn() as conn:
+        query = "SELECT * FROM problems WHERE 1=1"
+        params = []
+        if cluster_id is not None:
+            query += " AND cluster_id=?"
+            params.append(cluster_id)
+        if subreddit:
+            query += " AND subreddit=?"
+            params.append(subreddit)
+        query += " ORDER BY upvotes DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
 @app.get("/api/digests")
 def get_digests(limit: int = 30):
     with use_conn() as conn:
@@ -154,8 +183,9 @@ def get_stats():
             "total_ideas": conn.execute("SELECT COUNT(*) FROM ideas WHERE is_duplicate=0").fetchone()[0],
             "total_posts": conn.execute("SELECT COUNT(*) FROM raw_posts").fetchone()[0],
             "total_problems": conn.execute("SELECT COUNT(*) FROM problems").fetchone()[0],
+            "total_clusters": conn.execute("SELECT COUNT(*) FROM pain_clusters").fetchone()[0],
             "total_subreddits": conn.execute("SELECT COUNT(*) FROM subreddits WHERE active=1").fetchone()[0],
-            "last_run_at": conn.execute("SELECT MAX(created_at) FROM digests").fetchone()[0],
+            "last_run_at": conn.execute("SELECT MAX(created_at) FROM ideas").fetchone()[0],
         }
 
 

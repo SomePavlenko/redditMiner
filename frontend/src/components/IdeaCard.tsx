@@ -6,9 +6,12 @@ interface Idea {
   description: string
   product_example: string
   score: number
-  market_score: number
-  difficulty_score: number
+  demand_score: number
+  breadth_score: number
+  feasibility_score: number
   uniqueness_score: number
+  revenue_model: string
+  solves_clusters: string
   subreddits: string
   source_urls: string
   is_favourite: number
@@ -47,10 +50,16 @@ export default function IdeaCard({ idea, onToggleFav }: Props) {
       <p className="text-gray-300 text-sm mb-2">{idea.description}</p>
       <p className="text-gray-500 text-sm italic mb-3">→ {idea.product_example}</p>
       <div className="flex items-center gap-4 text-xs text-gray-400 mb-2">
-        <span>Рынок <b className="text-gray-300">{idea.market_score}</b>/10</span>
-        <span>Сложность <b className="text-gray-300">{idea.difficulty_score}</b>/10</span>
+        <span>Спрос <b className="text-gray-300">{idea.demand_score}</b>/10</span>
+        <span>Широта <b className="text-gray-300">{idea.breadth_score}</b>/10</span>
+        <span>Реализуемость <b className="text-gray-300">{idea.feasibility_score}</b>/10</span>
         <span>Уникальность <b className="text-gray-300">{idea.uniqueness_score}</b>/10</span>
       </div>
+      {idea.revenue_model && (
+        <div className="mb-2">
+          <span className="bg-gray-800 text-indigo-300 px-2 py-0.5 rounded text-xs">{idea.revenue_model}</span>
+        </div>
+      )}
       {subs.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           {subs.map(s => (

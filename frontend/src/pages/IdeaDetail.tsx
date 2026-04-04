@@ -91,9 +91,9 @@ export default function IdeaDetail() {
       })
       .catch(() => {})
 
-    fetch('/api/clusters')
+    fetch('/api/clusters?limit=1000')
       .then(r => r.json())
-      .then(setClusters)
+      .then(data => setClusters(data.items || data || []))
       .catch(() => {})
 
     fetch('/api/problems?limit=500')

@@ -2,7 +2,7 @@
   "topic": "job search",
   "min_upvotes": 50,
   "reddit_posts_per_request": 100,
-  "reddit_api_limit": 100,
+  "reddit_api_limit": 55,
   "claude_batch_size": 20,
   "digest_min_ideas": 3,
   "idea_score_threshold": 7,

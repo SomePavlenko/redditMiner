@@ -31,71 +31,23 @@ API docs: http://localhost:8000/docs
 
 ---
 
-## Получение Reddit API ключей (бесплатно)
+## Reddit API — настройка не нужна
 
-С ноября 2025 Reddit требует **предварительное одобрение** перед созданием API приложения.
+Парсинг работает через **публичный Reddit JSON** — без OAuth, без токенов, без регистрации приложения.
+URL формат: `https://www.reddit.com/r/{sub}/top.json?t=week&limit=100`
 
-### Шаг 1: Подать заявку на API доступ
+Лимит: ~60 запросов в минуту по IP. В config.json стоит `reddit_api_limit: 55` с запасом.
 
-1. Открой форму (через VPN если из России):
-   https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
-2. Заполни:
-   - **What do you need assistance with?** → `API Access Request`
-   - **Your email address** → твой email
-   - **Which role?** → `Individual Developer` или `Researcher`
-   - **Описание** (если есть поле):
-     ```
-     I'm building a personal, non-commercial script that reads public posts
-     and top comments from subreddits related to job search topics.
-     The script runs once daily and analyzes common user pain points
-     for personal research purposes.
-     Expected volume: under 100 API requests per day.
-     I will only access publicly available data (posts, comments, subreddit listings).
-     No user data collection, no commercial use, no redistribution of Reddit content.
-     I have read and will comply with the Responsible Builder Policy.
-     ```
-3. Нажми **Submit** и жди ответ (обычно до 7 дней)
-
-### Шаг 2: Создать приложение (после одобрения)
-
-1. Иди на https://www.reddit.com/prefs/apps (через VPN)
-2. Внизу нажми **"create another app..."**
-3. Заполни:
-   - **name:** любое (например `reddie-miner`)
-   - **type:** `script`
-   - **description:** `mining reddit posts`
-   - **redirect uri:** `http://localhost:8080` (обязательное поле, но не используется)
-   - **about url:** пусто
-4. Пройди капчу, нажми **"create app"**
-5. Скопируй:
-   - **client_id** — короткая строка прямо под названием приложения
-   - **client_secret** — поле "secret"
-
-### Шаг 3: Вставить в .env
-
-```
-REDDIT_CLIENT_ID=твой_client_id
-REDDIT_CLIENT_SECRET=твой_client_secret
-REDDIT_USER_AGENT=reddit-miner/1.0 by /u/твой_юзернейм
-```
-
-Лимит Reddit API: 600 запросов / 10 минут (бесплатно, без карты).
-В config.json стоит `reddit_api_limit: 100` для тестов — потом можно поднять до 580.
+> Заявка на Reddit OAuth API была подана на случай если понадобится в будущем.
+> Форма: https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
 
 ---
 
-## Получение Anthropic API ключа
+## Анализ данных — через Claude Code (бесплатно)
 
-1. Зарегистрируйся на https://console.anthropic.com
-2. Settings → API Keys → Create Key
-3. Вставь в `.env`:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+Вместо Anthropic API ($) анализ запускается через **Claude Code в терминале** — используется подписка claude.ai.
 
-Примерная стоимость: **$1-3/месяц** при ежедневном запуске.
-- Haiku (W0, W2) — ~$0.001/запрос
-- Sonnet (W3 дайджест) — ~$0.01/запрос
+Стоимость: **$0** (за счёт подписки Claude Pro/Max)
 
 ---
 
@@ -131,10 +83,18 @@ python3 -m workers.run_all
 ### По отдельности
 ```bash
 python3 -m workers.w0_topic --force   # найти сабреддиты для темы
-python3 -m workers.w1_parser           # спарсить посты из Reddit
-python3 -m workers.w2_analyzer         # извлечь боли через Claude Haiku
-python3 -m workers.w3_digest           # сгенерить идеи через Claude Sonnet
+python3 -m workers.w1_parser           # спарсить посты из Reddit (публичный JSON)
+python3 -m workers.w2_analyzer         # подготовить батчи для анализа → data/batches/
+python3 -m workers.w3_digest           # подготовить контекст для идей → data/digest_context.json
 python3 -m workers.w4_reparse          # напомнить о старых сабреддитах
+```
+
+### Анализ через Claude Code (после W2/W3)
+```bash
+claude
+> "Прочитай data/batches/, извлеки боли, запиши в БД таблица problems.
+   Пометь посты processed=1. Потом прочитай data/digest_context.json,
+   сгенерируй топ идеи и запиши в БД таблица ideas."
 ```
 
 ### Через API (из фронта или curl)
@@ -174,11 +134,11 @@ crontab -e
 ## Как работает система
 
 ```
-Ночь 02:00  →  W1 парсит Reddit (новые посты с топ-апвоутами)
-      03:00  →  W2 через Claude Haiku ищет боли пользователей в постах
-      04:00  →  W3 через Claude Sonnet генерит бизнес-идеи → БД + Telegram
-      05:00  →  W4 проверяет какие сабреддиты давно не парсились → напоминания
-Утро        →  Открываешь localhost:3000, смотришь свежие идеи
+Ночь 02:00  →  W1 парсит Reddit через публичный JSON (автоматически по cron)
+      03:00  →  W2 готовит батчи из новых постов (автоматически по cron)
+      04:00  →  W3 готовит контекст для дайджеста (автоматически по cron)
+Утро        →  Открываешь Claude Code, запускаешь анализ батчей + генерацию идей
+              →  Смотришь результаты на localhost:3000
 ```
 
 ---

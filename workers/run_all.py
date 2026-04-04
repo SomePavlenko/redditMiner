@@ -16,10 +16,10 @@ def run():
     init_db()
 
     steps = [
-        ("W0 topic", lambda: w0_topic.run(force=True)),
-        ("W1 parser", lambda: w1_parser.run()),
-        ("W2 analyzer", lambda: w2_analyzer.run()),
-        ("W3 digest", lambda: w3_digest.run()),
+        ("W0 Topic Scout", lambda: w0_topic.run(force=True)),
+        ("W1 Reddit Parser", lambda: w1_parser.run()),
+        ("W2 Подготовка батчей", lambda: w2_analyzer.run()),
+        ("W3 Подготовка дайджеста", lambda: w3_digest.run()),
     ]
 
     for name, fn in steps:
@@ -34,7 +34,17 @@ def run():
         logger.info(f"{name} completed in {elapsed:.1f}s")
         time.sleep(2)
 
-    logger.info("=== Cold start complete ===")
+    logger.info("=== Pipeline complete ===")
+
+    print(f"\n{'=' * 50}")
+    print("ДАННЫЕ ГОТОВЫ. Следующий шаг — анализ через Claude Code:")
+    print("=" * 50)
+    print()
+    print('  Скажи Claude:')
+    print('  "Прочитай data/batches/, извлеки боли, запиши в БД,')
+    print('   потом прочитай data/digest_context.json,')
+    print('   сгенерируй топ идеи и запиши в БД таблица ideas"')
+    print()
 
 
 if __name__ == "__main__":

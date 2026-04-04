@@ -9,6 +9,8 @@ __pycache__/
 
 # Data
 data/miner.db
+data/batches/
+data/digest_context.json
 logs/
 .topic_hash
 

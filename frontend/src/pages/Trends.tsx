@@ -225,18 +225,16 @@ export default function Trends() {
                     <>
                       <tr
                         key={c.id ?? c.cluster_name}
-                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
-                        onClick={() => setExpandedCluster(expandedCluster === c.id ? null : c.id)}
+                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
                       >
                         <td className="py-3 pr-4 text-gray-600 font-mono text-xs">{i + 1}</td>
                         <td className="py-3 pr-4 font-medium text-gray-200 max-w-[260px]">
-                          <Link
-                            to={`/clusters/${c.id}`}
-                            className="line-clamp-1 hover:text-indigo-400 transition-colors"
-                            onClick={e => e.stopPropagation()}
+                          <span
+                            className="line-clamp-1 cursor-pointer hover:text-indigo-400 transition-colors"
+                            onClick={() => setExpandedCluster(expandedCluster === c.id ? null : c.id)}
                           >
                             {c.cluster_name}
-                          </Link>
+                          </span>
                         </td>
                         <td className="py-3 pr-4">
                           <PainScoreBar score={c.pain_score} />
@@ -340,7 +338,7 @@ export default function Trends() {
                     return (
                       <tr
                         key={idea.id}
-                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
+                        className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
                       >
                         <td className="py-3 pr-4">
                           <span className="inline-flex items-center justify-center w-9 h-7 rounded-md bg-indigo-500/15 text-indigo-400 font-bold font-mono text-sm tabular-nums">

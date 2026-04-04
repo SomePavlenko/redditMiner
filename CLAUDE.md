@@ -5,74 +5,70 @@
 Выявляет частые проблемы пользователей и группирует их по темам.
 
 ## Стек
-- Python 3.11+ — все воркеры и FastAPI
+- Python 3.12 — скрипты (стадии) и FastAPI
 - SQLite (WAL mode) — основная БД, файл data/miner.db
 - React + Vite + Tailwind + Recharts — фронтенд на localhost:3000
 - FastAPI — REST API на localhost:8000
 - Reddit публичный JSON API — без OAuth, без токенов
-- Claude Code — анализ данных вручную через терминал (без API ключа)
+- Claude Code — анализ данных через терминал (без API ключа)
 
-## Воркеры и порядок запуска
-1. W0 — topic agent (разово при смене topic в config.json)
-2. W1 — parser: парсит Reddit через публичный JSON
-3. W2 — analyzer: готовит батчи для анализа через Claude Code
-4. W3 — digest: готовит контекст для генерации идей через Claude Code
-5. W4 — reparse suggestions (напоминания в Telegram)
+## Стадии пайплайна
 
-Для первого запуска: python3 -m workers.run_all
+| Стадия | Файл | Что делает |
+|---|---|---|
+| S0 Разведка | `s0_scout_subreddits.py` | Находит сабреддиты по теме (через Claude Code или `--add`) |
+| S1 Сбор | `s1_fetch_reddit.py` | Парсит Reddit: посты (S1a) + комменты к топ постам (S1b) |
+| — | `trimmer.py` | Обрезает данные Reddit до нужных полей (не стадия, утилита) |
+| S2 Батчи | `s2_prepare_batches.py` | Формирует JSON-батчи с промптом для Claude Code |
+| S3 Дайджест | `s3_prepare_digest.py` | Собирает контекст для генерации идей |
+| S4 Перепарсинг | `s4_reparse_check.py` | Напоминает о старых сабреддитах (Telegram) |
+| Тест | `test_flow.py` | Мини-прогон для отладки (1 сабреддит, 5 постов) |
+| Пайплайн | `run_pipeline.py` | Полный прогон S0→S1→S2→S3 |
 
-## Режим запуска (локальный, без API)
+## Где лежат промпты для Claude Code
 
-### Режим 1 — Парсинг (автономный, без Claude)
-```bash
-python3 -m workers.w1_parser   # парсит Reddit через публичный JSON
+| Файл | Когда создаётся | Что внутри |
+|---|---|---|
+| `data/find_subreddits_prompt.txt` | S0 (если нет сабреддитов) | Промпт для поиска сабреддитов по теме |
+| `data/batches/batch_NNN.json` → поле `_prompt` | S2 | Промпт для извлечения болей из постов |
+| `data/digest_context.json` | S3 | Контекст для генерации бизнес-идей |
+
+## Флоу данных
+
 ```
-Reddit JSON API: публичный, без токенов, лимит ~60 req/min по IP.
-URL формат: https://www.reddit.com/r/{sub}/top.json?t=week&limit=100
-
-### Режим 2 — Анализ (через Claude Code в терминале)
-Подготовка данных:
-```bash
-python3 -m workers.w2_analyzer  # создаёт data/batches/*.json
-python3 -m workers.w3_digest    # создаёт data/digest_context.json
+S0: тема из config.json → Claude Code находит сабреддиты → subreddits в БД
+S1a: Reddit JSON → trimmer.trim_posts() → raw_posts (без комментов)
+S1b: Reddit JSON → trimmer.trim_comments() → raw_posts.comments_json
+S2: raw_posts → обрезка → data/batches/*.json (с промптом)
+Claude Code: читает батчи → пишет в problems + ставит processed=1
+S3: problems → data/digest_context.json
+Claude Code: читает контекст → пишет в ideas
 ```
 
-Запуск анализа — открываешь Claude Code:
+## Запуск
+
 ```bash
-claude
+# Тестовый (отладка)
+python3 -m workers.test_flow
+
+# По стадиям
+python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance
+python3 -m workers.s1_fetch_reddit posts
+python3 -m workers.s1_fetch_reddit comments
+python3 -m workers.s2_prepare_batches
+python3 -m workers.s3_prepare_digest
+
+# Полный пайплайн
+python3 -m workers.run_pipeline
 ```
 
-Промпты для Claude Code:
-
-**Извлечение болей из батчей:**
-> Прочитай все файлы в data/batches/. Для каждого поста найди конкретные
-> боли пользователей — что не работает, что раздражает, что хотят улучшить.
-> Запиши результаты в БД data/miner.db таблица problems.
-> Потом пометь посты как processed=1 в таблице raw_posts.
-
-**Генерация дайджеста:**
-> Прочитай data/digest_context.json. Найди топ бизнес-идеи которые решают
-> эти боли. Для каждой идеи: название, описание, пример продукта, оценки
-> (рынок/сложность/уникальность 1-10). Запиши в data/miner.db таблица ideas.
-
-### Режим 3 — Автономный (с API ключом, опционально)
-Если хочешь запускать без себя ночью — добавь ANTHROPIC_API_KEY в .env
-и верни оригинальную логику вызовов API в w2/w3.
+## Конфиг
+Все настройки в `config.json`. Описание полей: `docs/config_reference.md`
 
 ## Важные соглашения
 - Все параметры только из config.json и .env, никаких хардкодов
-- Каждый воркер логирует в logs/{worker}_{date}.log
-- SQLite WAL mode включён при инициализации БД
-- W0 определяет смену topic через MD5 hash в файле .topic_hash
+- Скрипты (не Claude) режут данные через trimmer.py
+- Claude получает только чистые обрезанные данные
+- Каждый агент имеет свой промпт, контекст между запусками не сохраняется
 - Reddit JSON: sleep 1.1s между запросами (лимит ~55 req/min)
-
-## Статус разработки
-- [x] Структура папок и БД
-- [x] W0 topic agent
-- [x] W1 parser (публичный JSON, без OAuth)
-- [x] W2 analyzer (подготовка батчей для Claude Code)
-- [x] W3 digest (подготовка контекста для Claude Code)
-- [x] W4 reparse
-- [x] FastAPI
-- [x] React frontend
-- [x] setup.sh + cron
+- SQLite WAL mode, логи в logs/{stage}_{date}.log

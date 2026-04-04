@@ -41,7 +41,7 @@ async def update_config(body: dict):
     save_config(config)
     if body.get("topic") and body["topic"] != old_topic:
         subprocess.Popen(
-            [sys.executable, "-m", "workers.w0_topic", "--force"],
+            [sys.executable, "-m", "workers.s0_scout_subreddits", "--force"],
             cwd=ROOT,
         )
     return config
@@ -167,12 +167,14 @@ def health():
 
 
 WORKER_SCRIPTS = {
-    "w0": "workers.w0_topic",
-    "w1": "workers.w1_parser",
-    "w2": "workers.w2_analyzer",
-    "w3": "workers.w3_digest",
-    "w4": "workers.w4_reparse",
-    "all": "workers.run_all",
+    "s0": "workers.s0_scout_subreddits",
+    "s1": "workers.s1_fetch_reddit",
+    "s1-posts": "workers.s1_fetch_reddit",
+    "s1-comments": "workers.s1_fetch_reddit",
+    "s2": "workers.s2_prepare_batches",
+    "s3": "workers.s3_prepare_digest",
+    "s4": "workers.s4_reparse_check",
+    "all": "workers.run_pipeline",
 }
 
 

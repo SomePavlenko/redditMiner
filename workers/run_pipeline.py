@@ -1,3 +1,8 @@
+"""
+Полный пайплайн: разведка → парсинг → батчи → дайджест.
+python3 -m workers.run_pipeline
+"""
+
 import time
 import sys
 import os
@@ -6,20 +11,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from workers.helpers import setup_logger
 from workers.db import init_db
-from workers import w0_topic, w1_parser, w2_analyzer, w3_digest
+from workers import s0_scout_subreddits, s1_fetch_reddit, s2_prepare_batches, s3_prepare_digest
 
 
 def run():
-    logger = setup_logger("run_all")
-    logger.info("=== Cold start: running full pipeline ===")
+    logger = setup_logger("pipeline")
+    logger.info("=== Pipeline start ===")
 
     init_db()
 
     steps = [
-        ("W0 Topic Scout", lambda: w0_topic.run(force=True)),
-        ("W1 Reddit Parser", lambda: w1_parser.run()),
-        ("W2 Подготовка батчей", lambda: w2_analyzer.run()),
-        ("W3 Подготовка дайджеста", lambda: w3_digest.run()),
+        ("S0 Разведка сабреддитов", lambda: s0_scout_subreddits.run()),
+        ("S1 Парсинг Reddit", lambda: s1_fetch_reddit.run()),
+        ("S2 Подготовка батчей", lambda: s2_prepare_batches.run()),
+        ("S3 Подготовка дайджеста", lambda: s3_prepare_digest.run()),
     ]
 
     for name, fn in steps:
@@ -41,9 +46,7 @@ def run():
     print("=" * 50)
     print()
     print('  Скажи Claude:')
-    print('  "Прочитай data/batches/, извлеки боли, запиши в БД,')
-    print('   потом прочитай data/digest_context.json,')
-    print('   сгенерируй топ идеи и запиши в БД таблица ideas"')
+    print('  "Прочитай файлы в data/batches/, выполни _prompt из каждого файла"')
     print()
 
 

@@ -86,3 +86,11 @@ def init_db():
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         """)
+
+        # Migrations — idempotent column additions
+        try:
+            conn.execute("ALTER TABLE raw_posts ADD COLUMN comments_fetched INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception as e:
+            if "duplicate column" not in str(e).lower():
+                raise

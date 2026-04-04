@@ -50,8 +50,10 @@ IMPORTANT:
 Posts to analyze:
 {posts_json}
 
+LANGUAGE: All problem descriptions MUST be in Russian.
+
 Return ONLY JSON, no markdown:
-[{{"post_db_id": 123, "problems": ["specific pain one", "specific pain two"]}}]"""
+[{{"post_db_id": 123, "problems": ["конкретная боль на русском", "ещё одна боль на русском"]}}]"""
 
 # ─────────────────────────────────────────────
 # S4 — Cluster pains
@@ -67,8 +69,10 @@ TASK:
 3. Write summary — essence of the pain in 1-2 sentences
 4. Focus on pains solvable with software/SaaS
 
+LANGUAGE: cluster_name and summary MUST be in Russian.
+
 Return ONLY JSON, no markdown:
-[{{"cluster_name": "Cluster Name", "summary": "Pain essence", "problem_ids": [1, 5, 12]}}]
+[{{"cluster_name": "Название кластера", "summary": "Суть проблемы", "problem_ids": [1, 5, 12]}}]
 
 RULES:
 - One pain can only be in one cluster
@@ -151,20 +155,22 @@ HOW MANY IDEAS:
 
 ---
 
+LANGUAGE: ALL text fields (title, pain, solution, description, product_example, where_we_meet_user, monetization, competition_note, validation_step) MUST be in Russian.
+
 Return ONLY JSON, no markdown:
 [{{
-  "title": "specific product name",
-  "pain": "one sentence: what pain and where it occurs",
-  "solution": "one sentence: what the product does",
-  "description": "2-3 sentences with more detail",
-  "product_example": "concrete MVP: what UI, what it does, key feature (2-3 sentences)",
-  "where_we_meet_user": "specific moment and place where the user experiences this pain",
-  "monetization": "specific model with numbers",
+  "title": "конкретное название продукта",
+  "pain": "одно предложение: какая боль и где возникает",
+  "solution": "одно предложение: что делает продукт",
+  "description": "2-3 предложения подробнее",
+  "product_example": "конкретный MVP: UI, функция, ключевая фича (2-3 предложения)",
+  "where_we_meet_user": "конкретный момент и место где пользователь страдает",
+  "monetization": "конкретная модель с цифрами",
   "monetization_type": "saas_subscription | one_time | freemium | b2b_license",
   "revenue_model": "subscription",
   "competition_level": "none | low | medium | high",
-  "competition_note": "who are competitors and what's our advantage",
-  "validation_step": "one action in 2 hours to validate demand: what post, which subreddit, what question",
+  "competition_note": "кто конкуренты и в чём наше преимущество",
+  "validation_step": "одно действие на 2 часа чтобы проверить спрос",
   "solves_clusters": [1, 3],
   "feasibility": 7,
   "uniqueness": 8
@@ -217,6 +223,7 @@ ANALYSIS STRUCTURE:
 
 ---
 
+LANGUAGE: Write entire analysis in Russian.
 Be brief and specific. No filler.
 If you don't know something — say so honestly, don't fabricate."""
 

@@ -164,7 +164,7 @@ export default function Run() {
         <h1 className="text-2xl font-bold">Запуск анализа</h1>
 
         <Card className="bg-gray-900 border-gray-800">
-          <CardHeader><CardTitle className="text-base">Тема</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base text-white">Тема</CardTitle></CardHeader>
           <CardContent>
             <input
               value={topicOverride}
@@ -176,9 +176,9 @@ export default function Run() {
         </Card>
 
         <Card className="bg-gray-900 border-gray-800">
-          <CardHeader><CardTitle className="text-base">Параметры</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base text-white">Параметры</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
               {([
                 ['min_upvotes', 'Мин. апвоутов', ''],
                 ['reddit_api_limit', 'Reddit лимит', 'запросов'],
@@ -186,16 +186,16 @@ export default function Run() {
                 ['claude_batch_size', 'Размер батча', ''],
                 ['body_max_chars', 'Body лимит', 'символов'],
               ] as const).map(([key, label, suffix]) => (
-                <div key={key} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-gray-400">{label}</span>
-                  <div className="flex items-center gap-1">
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-400 shrink-0">{label}</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       value={params[key]}
                       onChange={e => setParams(p => ({ ...p, [key]: Number(e.target.value) || 0 }))}
-                      className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right text-gray-100 focus:border-indigo-500 focus:outline-none"
+                      className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-right text-gray-100 focus:border-indigo-500 focus:outline-none"
                     />
-                    {suffix && <span className="text-xs text-gray-500">{suffix}</span>}
+                    {suffix && <span className="text-xs text-gray-500 w-16">{suffix}</span>}
                   </div>
                 </div>
               ))}
@@ -205,7 +205,7 @@ export default function Run() {
         </Card>
 
         <Card className="bg-gray-900 border-gray-800">
-          <CardHeader><CardTitle className="text-base">Пайплайн</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base text-white">Пайплайн</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {STAGE_ORDER.map(s => (
               <div key={s} className="flex items-center gap-3 text-sm">

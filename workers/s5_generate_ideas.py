@@ -118,7 +118,7 @@ uniqueness (1-10) — есть ли аналоги:
 Верни ТОЛЬКО JSON массив, без markdown."""
 
     logger.info(f"S5: sending {len(clusters)} clusters to Claude for idea generation")
-    raw = claude_call("claude-sonnet-4-6-20250514", prompt, config, logger)
+    raw = claude_call(config["claude_model_smart"], prompt, config, logger)
 
     try:
         ideas = parse_json_response(raw, logger)

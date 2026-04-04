@@ -12,6 +12,8 @@
   "comments_top_n": 10,
   "posts_for_comments_n": 15,
 
+  "claude_model_fast": "claude-haiku-4-5-20251001",
+  "claude_model_smart": "claude-haiku-4-5-20251001",
   "claude_batch_size": 20,
   "digest_min_ideas": 3,
   "idea_score_threshold": 7,

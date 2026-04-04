@@ -40,7 +40,7 @@ def analyze_batch(batch_file, config, logger):
 [{{"post_db_id": 123, "subreddit": "jobs", "problems": ["боль 1", "боль 2"], "url": "https://..."}}]
 Если проблем нет — верни пустой массив problems для этого поста."""
 
-    raw = claude_call("claude-haiku-4-5-20250901", prompt, config, logger)
+    raw = claude_call(config["claude_model_fast"], prompt, config, logger)
     return parse_json_response(raw, logger)
 
 

@@ -64,7 +64,7 @@ def run():
 {json.dumps(problems_list, ensure_ascii=False)}"""
 
     logger.info(f"S4: sending {len(problems_list)} problems to Claude for clustering")
-    raw = claude_call("claude-haiku-4-5-20250901", prompt, config, logger)
+    raw = claude_call(config["claude_model_fast"], prompt, config, logger)
 
     try:
         clusters = parse_json_response(raw, logger)

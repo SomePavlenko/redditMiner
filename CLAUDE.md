@@ -2,73 +2,89 @@
 
 ## Что это
 Личный некоммерческий инструмент для анализа публичных обсуждений Reddit.
-Выявляет частые проблемы пользователей и группирует их по темам.
+Выявляет частые проблемы пользователей, кластеризует боли, генерирует продуктовые идеи с оценками.
 
 ## Стек
 - Python 3.12 — скрипты (стадии) и FastAPI
-- SQLite (WAL mode) — основная БД, файл data/miner.db
-- React + Vite + Tailwind + Recharts — фронтенд на localhost:3000
-- FastAPI — REST API на localhost:8000
-- Reddit публичный JSON API — без OAuth, без токенов
-- Claude Code — анализ данных через терминал (без API ключа)
+- SQLite (WAL mode) — данные в data/miner.db
+- React + Vite + Tailwind + Recharts — фронтенд localhost:3000
+- FastAPI — REST API localhost:8000
+- Reddit публичный JSON API — без OAuth
+- Claude Code — анализ через терминал (без API ключа)
 
-## Стадии пайплайна
-
-| Стадия | Файл | Что делает |
-|---|---|---|
-| S0 Разведка | `s0_scout_subreddits.py` | Находит сабреддиты по теме (через Claude Code или `--add`) |
-| S1 Сбор | `s1_fetch_reddit.py` | Парсит Reddit: посты (S1a) + комменты к топ постам (S1b) |
-| — | `trimmer.py` | Обрезает данные Reddit до нужных полей (не стадия, утилита) |
-| S2 Батчи | `s2_prepare_batches.py` | Формирует JSON-батчи с промптом для Claude Code |
-| S3 Дайджест | `s3_prepare_digest.py` | Собирает контекст для генерации идей |
-| S4 Перепарсинг | `s4_reparse_check.py` | Напоминает о старых сабреддитах (Telegram) |
-| Тест | `test_flow.py` | Мини-прогон для отладки (1 сабреддит, 5 постов) |
-| Пайплайн | `run_pipeline.py` | Полный прогон S0→S1→S2→S3 |
-
-## Где лежат промпты для Claude Code
-
-| Файл | Когда создаётся | Что внутри |
-|---|---|---|
-| `data/find_subreddits_prompt.txt` | S0 (если нет сабреддитов) | Промпт для поиска сабреддитов по теме |
-| `data/batches/batch_NNN.json` → поле `_prompt` | S2 | Промпт для извлечения болей из постов |
-| `data/digest_context.json` | S3 | Контекст для генерации бизнес-идей |
-
-## Флоу данных
+## Пайплайн
 
 ```
-S0: тема из config.json → Claude Code находит сабреддиты → subreddits в БД
-S1a: Reddit JSON → trimmer.trim_posts() → raw_posts (без комментов)
-S1b: Reddit JSON → trimmer.trim_comments() → raw_posts.comments_json
-S2: raw_posts → обрезка → data/batches/*.json (с промптом)
-Claude Code: читает батчи → пишет в problems + ставит processed=1
-S3: problems → data/digest_context.json
-Claude Code: читает контекст → пишет в ideas
+S0 Разведка       → сабреддиты в БД
+S1a Посты          → Reddit JSON → trimmer → raw_posts
+S1b Комменты       → Reddit JSON → trimmer → raw_posts.comments_json
+S2 Батчи           → data/batches/*.json (с _prompt внутри)
+   [Claude Code]   → data/problems_raw.json
+S3 Сохранение      → problems в БД (скрипт, не Claude)
+S4 Кластеризация   → data/cluster_prompt.json
+   [Claude Code]   → data/clusters_raw.json
+S4 --save          → pain_clusters в БД (с pain_score)
+S5 Идеи            → data/ideas_prompt.json
+   [Claude Code]   → data/ideas_raw.json
+S5 --save          → ideas в БД (со скорингом + дедуп)
+S6 Перепарсинг     → Telegram напоминания
 ```
+
+## Стадии
+
+| Стадия | Файл | Запуск |
+|---|---|---|
+| S0 Разведка | `s0_scout_subreddits.py` | `--add jobs,resumes` или промпт для Claude Code |
+| S1 Сбор | `s1_fetch_reddit.py` | `posts` / `comments` / без аргументов = оба |
+| — Обрезка | `trimmer.py` | утилита, не запускается отдельно |
+| S2 Батчи | `s2_prepare_batches.py` | готовит JSON с _prompt |
+| S3 Боли → БД | `s3_save_problems.py` | читает problems_raw.json → INSERT |
+| S4 Кластеры | `s4_cluster_problems.py` | без аргументов = промпт / `--save` = в БД |
+| S5 Идеи | `s5_generate_ideas.py` | без аргументов = промпт / `--save` = скоринг + БД |
+| S6 Перепарсинг | `s6_reparse_check.py` | Telegram напоминания |
+| Тест | `test_flow.py` | мини-прогон |
+| Пайплайн | `run_pipeline.py` | `--after-s2` / `--after-s4` |
+
+## Промпты для Claude Code
+
+| Файл | Стадия | Что делает |
+|---|---|---|
+| `data/find_subreddits_prompt.txt` | S0 | Поиск сабреддитов по теме |
+| `data/batches/batch_NNN.json` → `_prompt` | S2 | Извлечение болей из постов |
+| `data/cluster_prompt.json` → `_prompt` | S4 | Кластеризация + названия болей |
+| `data/ideas_prompt.json` → `_prompt` | S5 | Генерация идей + оценки |
+
+## Скоринг
+
+### pain_score (боль кластера, считает скрипт):
+```
+pain_score = frequency×2 + subreddit_spread×3 + log(total_upvotes+1)
+```
+
+### idea score (финальный, считает скрипт):
+```
+score = demand×0.35 + breadth×0.25 + feasibility×0.20 + uniqueness×0.20
+```
+- demand: средний pain_score решаемых кластеров (из данных)
+- breadth: сколько кластеров покрывает (из данных)
+- feasibility: Claude оценивает (2 разработчика, MVP 2-4 недели)
+- uniqueness: Claude оценивает (наличие аналогов)
+
+## Конфиг
+Все настройки в `config.json`. Описание: `docs/config_reference.md`
 
 ## Запуск
 
 ```bash
-# Тестовый (отладка)
+# Тест
 python3 -m workers.test_flow
 
-# По стадиям
-python3 -m workers.s0_scout_subreddits --add jobs,resumes,careerguidance
-python3 -m workers.s1_fetch_reddit posts
-python3 -m workers.s1_fetch_reddit comments
-python3 -m workers.s2_prepare_batches
-python3 -m workers.s3_prepare_digest
-
-# Полный пайплайн
+# Полный пайплайн (3 этапа с паузами на Claude Code)
 python3 -m workers.run_pipeline
+# → Claude Code анализирует батчи → сохраняет problems_raw.json
+python3 -m workers.run_pipeline --after-s2
+# → Claude Code кластеризует → сохраняет clusters_raw.json
+python3 -m workers.run_pipeline --after-s4
+# → Claude Code генерит идеи → сохраняет ideas_raw.json
+python3 -m workers.s5_generate_ideas --save
 ```
-
-## Конфиг
-Все настройки в `config.json`. Описание полей: `docs/config_reference.md`
-
-## Важные соглашения
-- Все параметры только из config.json и .env, никаких хардкодов
-- Скрипты (не Claude) режут данные через trimmer.py
-- Claude получает только чистые обрезанные данные
-- Каждый агент имеет свой промпт, контекст между запусками не сохраняется
-- Reddit JSON: sleep 1.1s между запросами (лимит ~55 req/min)
-- SQLite WAL mode, логи в logs/{stage}_{date}.log

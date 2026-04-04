@@ -60,7 +60,22 @@ def init_db():
           problem TEXT NOT NULL,
           upvotes INTEGER DEFAULT 0,
           source_url TEXT,
+          cluster_id INTEGER DEFAULT NULL,
           parsed_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS pain_clusters (
+          id INTEGER PRIMARY KEY,
+          topic TEXT NOT NULL,
+          cluster_name TEXT,
+          summary TEXT,
+          problems_json TEXT,
+          frequency INTEGER DEFAULT 0,
+          total_upvotes INTEGER DEFAULT 0,
+          avg_upvotes REAL DEFAULT 0,
+          subreddit_spread INTEGER DEFAULT 0,
+          subreddits_json TEXT,
+          pain_score REAL DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS ideas (
           id INTEGER PRIMARY KEY,
@@ -68,10 +83,13 @@ def init_db():
           title TEXT NOT NULL,
           description TEXT,
           product_example TEXT,
+          revenue_model TEXT,
           score REAL DEFAULT 0,
-          market_score INTEGER DEFAULT 0,
-          difficulty_score INTEGER DEFAULT 0,
-          uniqueness_score INTEGER DEFAULT 0,
+          demand_score REAL DEFAULT 0,
+          breadth_score REAL DEFAULT 0,
+          feasibility_score REAL DEFAULT 0,
+          uniqueness_score REAL DEFAULT 0,
+          solves_clusters TEXT,
           source_urls TEXT,
           subreddits TEXT,
           is_favourite INTEGER DEFAULT 0,
@@ -88,9 +106,19 @@ def init_db():
         """)
 
         # Migrations — idempotent column additions
-        try:
-            conn.execute("ALTER TABLE raw_posts ADD COLUMN comments_fetched INTEGER DEFAULT 0")
-            conn.commit()
-        except Exception as e:
-            if "duplicate column" not in str(e).lower():
-                raise
+        _migrate(conn, "raw_posts", "comments_fetched", "INTEGER DEFAULT 0")
+        _migrate(conn, "problems", "cluster_id", "INTEGER DEFAULT NULL")
+        _migrate(conn, "ideas", "demand_score", "REAL DEFAULT 0")
+        _migrate(conn, "ideas", "breadth_score", "REAL DEFAULT 0")
+        _migrate(conn, "ideas", "feasibility_score", "REAL DEFAULT 0")
+        _migrate(conn, "ideas", "revenue_model", "TEXT")
+        _migrate(conn, "ideas", "solves_clusters", "TEXT")
+
+
+def _migrate(conn, table, column, col_type):
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        conn.commit()
+    except Exception as e:
+        if "duplicate column" not in str(e).lower():
+            raise

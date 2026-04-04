@@ -169,12 +169,12 @@ def health():
 WORKER_SCRIPTS = {
     "s0": "workers.s0_scout_subreddits",
     "s1": "workers.s1_fetch_reddit",
-    "s1-posts": "workers.s1_fetch_reddit",
-    "s1-comments": "workers.s1_fetch_reddit",
     "s2": "workers.s2_prepare_batches",
-    "s3": "workers.s3_prepare_digest",
-    "s4": "workers.s4_reparse_check",
-    "all": "workers.run_pipeline",
+    "s3": "workers.s3_save_problems",
+    "s4": "workers.s4_cluster_problems",
+    "s5": "workers.s5_generate_ideas",
+    "s6": "workers.s6_reparse_check",
+    "pipeline": "workers.run_pipeline",
 }
 
 

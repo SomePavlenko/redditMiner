@@ -230,6 +230,17 @@ ANALYSIS STRUCTURE:
 6. VERDICT
    One line: do it / don't do it / do it if [condition]
 
+7. UPDATED SCORES (based on your deep analysis)
+   Return a JSON block at the very end, after all text:
+   %%SCORES_JSON%%
+   {{"feasibility": 6, "uniqueness": 7, "competition_level": "medium"}}
+   %%END_SCORES%%
+
+   Be HONEST — if deep analysis revealed problems, LOWER the scores.
+   feasibility: same scale 1-10
+   uniqueness: same scale 1-10
+   competition_level: none | low | medium | high
+
 ---
 
 LANGUAGE: Write entire analysis in Russian.

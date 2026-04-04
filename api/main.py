@@ -144,14 +144,59 @@ async def run_deep_analysis(idea_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Claude API error: {e}")
 
+    # Parse updated scores from deep analysis
+    import re
+    updated_scores = {}
+    scores_match = re.search(r'%%SCORES_JSON%%\s*(\{.*?\})\s*%%END_SCORES%%', result, re.DOTALL)
+    if scores_match:
+        try:
+            updated_scores = json.loads(scores_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Clean result text (remove score markers)
+    clean_result = re.sub(r'%%SCORES_JSON%%.*?%%END_SCORES%%', '', result, flags=re.DOTALL).strip()
+
     with use_conn() as conn:
+        # Update deep analysis result
         conn.execute(
             "UPDATE ideas SET deep_analysis_done=1, deep_analysis_result=? WHERE id=?",
-            (result, idea_id),
+            (clean_result, idea_id),
         )
+
+        # Update scores if deep analysis provided them
+        if updated_scores:
+            new_feasibility = min(max(updated_scores.get("feasibility", idea["feasibility_score"]), 1), 10)
+            new_uniqueness = min(max(updated_scores.get("uniqueness", idea["uniqueness_score"]), 1), 10)
+            new_competition = updated_scores.get("competition_level", idea["competition_level"])
+
+            # Recalculate total score with updated values
+            demand = idea["demand_score"] or 0
+            breadth = idea["breadth_score"] or 0
+            new_score = round(demand * 0.35 + breadth * 0.25 + new_feasibility * 0.20 + new_uniqueness * 0.20, 2)
+
+            conn.execute(
+                """UPDATE ideas SET
+                    feasibility_score=?, uniqueness_score=?, competition_level=?, score=?
+                WHERE id=?""",
+                (new_feasibility, new_uniqueness, new_competition, new_score, idea_id),
+            )
+
         conn.commit()
 
-    return {"id": idea_id, "status": "done", "result": result}
+        # Fetch updated idea
+        updated = conn.execute("SELECT * FROM ideas WHERE id=?", (idea_id,)).fetchone()
+
+    return {
+        "id": idea_id,
+        "status": "done",
+        "result": clean_result,
+        "updated_scores": updated_scores,
+        "new_score": dict(updated)["score"] if updated else None,
+        "feasibility_score": dict(updated)["feasibility_score"] if updated else None,
+        "uniqueness_score": dict(updated)["uniqueness_score"] if updated else None,
+        "competition_level": dict(updated)["competition_level"] if updated else None,
+    }
 
 
 @app.get("/api/subreddits")

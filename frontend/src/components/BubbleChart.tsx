@@ -17,6 +17,7 @@ interface ClusterInfo {
   id: number
   cluster_name: string
   pain_score?: number
+  subreddits_json?: string
 }
 
 interface Props {
@@ -81,6 +82,28 @@ function buildGraph(ideas: Idea[], clusterMap: Map<number, ClusterInfo>) {
   const nodes: SimNode[] = []
   const links: SimLink[] = []
   const seen = new Set<string>()
+  const linkSeen = new Set<string>()
+
+  // Helper: add subreddit node if not exists
+  function ensureSub(sub: string) {
+    const key = `sub-${sub}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      nodes.push({
+        id: key, label: `r/${sub}`, type: 'subreddit',
+        size: 5, color: SUB_COLOR,
+        x: 0, y: 0, vx: 0, vy: 0,
+        subName: sub,
+      })
+    }
+    return key
+  }
+
+  // Helper: add link if not duplicate
+  function addLink(from: string, to: string) {
+    const k = `${from}|${to}`
+    if (!linkSeen.has(k)) { linkSeen.add(k); links.push({ from, to }) }
+  }
 
   ideas.forEach(idea => {
     const ideaKey = `idea-${idea.id}`
@@ -95,24 +118,7 @@ function buildGraph(ideas: Idea[], clusterMap: Map<number, ClusterInfo>) {
       score: idea.score,
     })
 
-    // Subreddits
-    let subs: string[] = []
-    try { subs = JSON.parse(idea.subreddits) || [] } catch { /* ignore */ }
-    subs.forEach(sub => {
-      const key = `sub-${sub}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        nodes.push({
-          id: key, label: `r/${sub}`, type: 'subreddit',
-          size: 5, color: SUB_COLOR,
-          x: 0, y: 0, vx: 0, vy: 0,
-          subName: sub,
-        })
-      }
-      links.push({ from: ideaKey, to: key })
-    })
-
-    // Clusters
+    // Idea → Cluster links
     let clusterIds: number[] = []
     try { clusterIds = JSON.parse(idea.solves_clusters) || [] } catch { /* ignore */ }
     clusterIds.forEach(cid => {
@@ -131,8 +137,19 @@ function buildGraph(ideas: Idea[], clusterMap: Map<number, ClusterInfo>) {
           clusterName: info?.cluster_name,
           painScore: info?.pain_score,
         })
+
+        // Cluster → Subreddit links (from cluster's own data)
+        if (info?.subreddits_json) {
+          try {
+            const subs: string[] = JSON.parse(info.subreddits_json) || []
+            subs.forEach(sub => {
+              const subKey = ensureSub(sub)
+              addLink(key, subKey)
+            })
+          } catch { /* ignore */ }
+        }
       }
-      links.push({ from: ideaKey, to: key })
+      addLink(ideaKey, key)
     })
   })
 

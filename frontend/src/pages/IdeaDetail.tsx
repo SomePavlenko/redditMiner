@@ -140,7 +140,16 @@ export default function IdeaDetail() {
       const resp = await fetch(`/api/ideas/${idea.id}/deep-analysis`, { method: 'POST' })
       const data = await resp.json()
       if (data.result) {
-        setIdea({ ...idea, deep_analysis_result: data.result, deep_analysis_done: 1 })
+        setIdea({
+          ...idea,
+          deep_analysis_result: data.result,
+          deep_analysis_done: 1,
+          // Update scores from deep analysis
+          ...(data.new_score != null ? { score: data.new_score } : {}),
+          ...(data.feasibility_score != null ? { feasibility_score: data.feasibility_score } : {}),
+          ...(data.uniqueness_score != null ? { uniqueness_score: data.uniqueness_score } : {}),
+          ...(data.competition_level ? { competition_level: data.competition_level } : {}),
+        })
       }
     } catch { /* ignore */ }
     setAnalyzing(false)
@@ -253,21 +262,38 @@ export default function IdeaDetail() {
           {/* Deep Analysis */}
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader className="px-5 pt-5 pb-3">
-              <CardTitle className="text-base">Deep Analysis</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base text-white">Deep Analysis</CardTitle>
+                {idea.deep_analysis_done ? (
+                  <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-800 text-[10px]">
+                    Оценки обновлены
+                  </Badge>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="px-5 pb-5">
               {idea.deep_analysis_result ? (
                 <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-950 border border-gray-800 rounded-lg p-4 max-h-[600px] overflow-y-auto">
                   {idea.deep_analysis_result}
                 </div>
+              ) : analyzing ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-gray-400">Анализирую конкурентов, рынок, MVP стек...</span>
+                  </div>
+                  <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+                  </div>
+                  <p className="text-xs text-gray-600">Обычно 30-60 секунд. Оценки обновятся автоматически.</p>
+                </div>
               ) : (
                 <Button
                   variant="outline"
                   className="w-full bg-gray-800 border-gray-700 hover:bg-gray-700"
                   onClick={runDeepAnalysis}
-                  disabled={analyzing}
                 >
-                  {analyzing ? 'Анализирую... (30-60 сек)' : 'Запустить Deep Analysis'}
+                  Запустить Deep Analysis
                 </Button>
               )}
             </CardContent>

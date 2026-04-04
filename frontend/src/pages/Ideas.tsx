@@ -54,7 +54,7 @@ export default function Ideas() {
   const handleSearchInput = (val: string) => {
     setSearchInput(val)
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => { setSearch(val); setPage(0) }, 300)
+    debounceRef.current = setTimeout(() => { setSearch(val); setPage(0) }, 500)
   }
 
   const toggleFav = async (id: number) => {

@@ -84,8 +84,9 @@ export default function IdeaDetail() {
   useEffect(() => {
     fetch(`/api/ideas?show_duplicates=1&limit=1000`)
       .then(r => r.json())
-      .then((ideas: Idea[]) => {
-        const found = ideas.find(i => i.id === Number(id))
+      .then((data) => {
+        const items: Idea[] = data.items || data || []
+        const found = items.find(i => i.id === Number(id))
         if (found) setIdea(found)
       })
       .catch(() => {})

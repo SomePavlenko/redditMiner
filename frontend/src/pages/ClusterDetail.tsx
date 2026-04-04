@@ -61,10 +61,11 @@ export default function ClusterDetail() {
     setLoading(true)
 
     Promise.all([
-      fetch('/api/clusters')
+      fetch('/api/clusters?limit=1000')
         .then(r => r.json())
-        .then((clusters: Cluster[]) => {
-          const found = clusters.find(c => c.id === numId)
+        .then((data) => {
+          const items: Cluster[] = data.items || data || []
+          const found = items.find(c => c.id === numId)
           if (found) setCluster(found)
         }),
       fetch(`/api/problems?cluster_id=${numId}`)
@@ -73,7 +74,7 @@ export default function ClusterDetail() {
         .catch(() => {}),
       fetch('/api/ideas?limit=1000')
         .then(r => r.json())
-        .then((ideas: Idea[]) => setAllIdeas(ideas))
+        .then((data) => setAllIdeas(data.items || data || []))
         .catch(() => {}),
     ])
       .catch(() => {})

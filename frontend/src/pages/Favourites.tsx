@@ -35,7 +35,7 @@ export default function Favourites() {
   const fetchIdeas = useCallback(() => {
     fetch('/api/ideas?favourite=1')
       .then(r => r.json())
-      .then(setIdeas)
+      .then(data => setIdeas(data.items || data || []))
       .catch(() => {})
   }, [])
 

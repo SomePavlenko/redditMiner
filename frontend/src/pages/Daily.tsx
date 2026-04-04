@@ -41,9 +41,9 @@ export default function Daily() {
   const [view, setView] = useState<'bubbles' | 'list'>('list')
 
   const fetchIdeas = useCallback(() => {
-    fetch(`/api/ideas?date=${date}`)
+    fetch(`/api/ideas?date=${date}&limit=100`)
       .then(r => r.json())
-      .then(setIdeas)
+      .then(data => setIdeas(data.items || data || []))
       .catch(() => {})
   }, [date])
 

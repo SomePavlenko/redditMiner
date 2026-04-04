@@ -121,7 +121,8 @@ export default function Trends() {
     // Ideas — derive "by day" chart + top-10 table
     fetch('/api/ideas?limit=1000')
       .then(r => r.json())
-      .then((ideas: Idea[]) => {
+      .then((data) => {
+        const ideas: Idea[] = data.items || data || []
         const byDay: Record<string, number> = {}
         ideas.forEach(i => {
           const d = i.created_at?.split('T')[0] ?? i.created_at?.split(' ')[0]
@@ -145,9 +146,10 @@ export default function Trends() {
     // Clusters
     fetch('/api/clusters?limit=10')
       .then(r => r.json())
-      .then((clusters: Cluster[]) =>
+      .then((data) => {
+        const clusters: Cluster[] = data.items || data || []
         setTopClusters([...clusters].sort((a, b) => b.pain_score - a.pain_score).slice(0, 10))
-      )
+      })
       .catch(() => {})
   }, [])
 

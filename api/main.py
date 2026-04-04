@@ -51,15 +51,17 @@ async def update_config(body: dict):
 def get_ideas(
     date: str = None,
     topic: str = None,
+    search: str = None,
     subreddit: str = None,
     favourite: int = None,
     min_score: float = None,
     show_duplicates: int = 0,
-    limit: int = 50,
+    sort: str = "score",
+    limit: int = 20,
     offset: int = 0,
 ):
     with use_conn() as conn:
-        query = "SELECT * FROM ideas WHERE 1=1"
+        query = "SELECT *, COUNT(*) OVER() as total_count FROM ideas WHERE 1=1"
         params = []
 
         if not show_duplicates:
@@ -70,6 +72,10 @@ def get_ideas(
         if topic:
             query += " AND topic=?"
             params.append(topic)
+        if search:
+            query += " AND (title LIKE ? OR description LIKE ? OR pain LIKE ? OR solution LIKE ?)"
+            s = f"%{search}%"
+            params.extend([s, s, s, s])
         if subreddit:
             query += " AND subreddits LIKE ?"
             params.append(f'%"{subreddit}"%')
@@ -80,11 +86,16 @@ def get_ideas(
             query += " AND score>=?"
             params.append(min_score)
 
-        query += " ORDER BY score DESC LIMIT ? OFFSET ?"
+        order = {"score": "score DESC", "date": "created_at DESC", "favourite": "is_favourite DESC, score DESC"}
+        query += f" ORDER BY {order.get(sort, 'score DESC')} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         rows = conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        results = [dict(r) for r in rows]
+        total = results[0]["total_count"] if results else 0
+        for r in results:
+            r.pop("total_count", None)
+        return {"items": results, "total": total, "limit": limit, "offset": offset}
 
 
 @app.post("/api/ideas/{idea_id}/favourite")
@@ -224,15 +235,34 @@ def queue_subreddit(name: str):
 
 
 @app.get("/api/clusters")
-def get_clusters(topic: str = None):
+def get_clusters(
+    topic: str = None,
+    search: str = None,
+    sort: str = "pain_score",
+    limit: int = 50,
+    offset: int = 0,
+):
     with use_conn() as conn:
+        query = "SELECT *, COUNT(*) OVER() as total_count FROM pain_clusters WHERE 1=1"
+        params = []
         if topic:
-            rows = conn.execute(
-                "SELECT * FROM pain_clusters WHERE topic=? ORDER BY pain_score DESC", (topic,)
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM pain_clusters ORDER BY pain_score DESC").fetchall()
-        return [dict(r) for r in rows]
+            query += " AND topic=?"
+            params.append(topic)
+        if search:
+            query += " AND (cluster_name LIKE ? OR summary LIKE ?)"
+            s = f"%{search}%"
+            params.extend([s, s])
+
+        order = {"pain_score": "pain_score DESC", "frequency": "frequency DESC", "subreddit_spread": "subreddit_spread DESC"}
+        query += f" ORDER BY {order.get(sort, 'pain_score DESC')} LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        rows = conn.execute(query, params).fetchall()
+        results = [dict(r) for r in rows]
+        total = results[0]["total_count"] if results else 0
+        for r in results:
+            r.pop("total_count", None)
+        return {"items": results, "total": total, "limit": limit, "offset": offset}
 
 
 @app.get("/api/problems")
